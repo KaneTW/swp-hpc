@@ -53,6 +53,8 @@ int main(int argc, char *argv[]){
 	floatType *b, *x;
 	floatType residual, bnrm2;
 	int correct;
+	unsigned long long totalLength; // int's too small
+	double flops;
 	double ioTime, solveTime, totalTime;
 
 	/* The folloing variables are used to 
@@ -175,6 +177,17 @@ int main(int argc, char *argv[]){
 	solveTime = getWTime();
 	cg(n, nnz, maxNNZ, data, indices, length, b, x, &sc);
 	solveTime = getWTime()-solveTime;
+	
+	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
+
+	totalLength = 0;
+	int i;
+	for (i = 0; i < n; i++) {
+		totalLength += length[i];
+	}
+	
+	flops = (totalLength*4 + 9*n + 4*sc.iter*(totalLength*4 + 15*n))/solveTime;
+	flops /= 1000000; // gflops
 
 	/* Print solution vector x or the first 10 values of the result. 
 	 * Should be 1 in case of convergence. */
@@ -191,8 +204,6 @@ int main(int argc, char *argv[]){
 	correct = check_error(bnrm2, residual, sc.tolerance);
 
 	FILE *fp;
-	int i;
-
 	if ((fp = fopen("x.out", "w")) == NULL) {
 		fprintf(stderr, "Faield to write output file %s!\n", "x.out");
 		exit(1);
@@ -226,7 +237,7 @@ int main(int argc, char *argv[]){
 	    /* TODO: Implement the calculation for the FLOPS of the here. */ 
 	    /* Hint: Refer to solve.c and think about how many opertions */
 	    /*       are done in the innmost loop and how often this is done.*/
-	    "Hotspot GFLOP/s", 'f', -1.0,
+	    "Hotspot GFLOP/s", 'f', flops,
 	    "IO time", 'f', ioTime,
 	    "Solve time", 'f', solveTime,
 	    "Total time", 'f', totalTime,
