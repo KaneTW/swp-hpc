@@ -4,7 +4,7 @@ OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = ${FLAGS_FAST} -g
+C_FLAGS = ${FLAGS_FAST} -g -vec-report=2 -restrict -opt-subscript-in-range # -guide -parallel
 LINKER = ${CC}
 
 ifeq ($(dbg),1)
@@ -48,13 +48,13 @@ cg.exe: ${OBJ}
 # For basic performance analysis it might be enough to run less iterations
 # and compare the GFLOPS of the matrix vector product.
 run: cg.exe
-	CG_MAX_ITER=6000 OMP_NUM_THREADS=1 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
+	CG_MAX_ITER=1000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
 
 run_serena: cg.exe
 	CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/Serena.mtx
 
 run_debug: cg.exe
-	CG_MAX_ITER=1 OMP_NUM_THREADS=1 OMP_PLACES=cores ./cg.exe debug.mtx
+	CG_MAX_ITER=100 OMP_NUM_THREADS=6 OMP_PLACES=cores ./cg.exe debug.mtx
 
 clean:
 	rm -f cg.exe
