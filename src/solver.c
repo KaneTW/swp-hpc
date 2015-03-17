@@ -62,9 +62,9 @@ void xpay(const floatType* x, const floatType a, const int n, floatType* y){
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* x, floatType* y){
 	int i, j, k;
-	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices)
+	memset(y, 0, n*sizeof(y[0]));
+	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices) collapse(2)
 	for (i = 0; i < n; i++) {
-		y[i] = 0;
 		for (j = 0; j < length[i]; j++) {
 			k = j * n + i;
 			y[i] += data[k] * x[indices[k]];
