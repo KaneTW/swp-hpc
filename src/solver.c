@@ -29,7 +29,7 @@
 
 
 /* ab <- a' * b */
-void vectorDot(const floatType* a, const floatType* b, const int n, floatType* ab){
+void vectorDot(const floatType* restrict a, const floatType* restrict b, const int n, floatType* restrict ab){
 	int i;
 	floatType temp;
 	temp=0;
@@ -41,7 +41,7 @@ void vectorDot(const floatType* a, const floatType* b, const int n, floatType* a
 }
 
 /* y <- ax + y */
-void axpy(const floatType a, const floatType* x, const int n, floatType* y){
+void axpy(const floatType a, const floatType* restrict x, const int n, floatType* restrict y){
 	int i;
 	#pragma omp parallel for default(none) private(i) shared(y,x,a)
 	for(i=0; i<n; i++){
@@ -50,7 +50,7 @@ void axpy(const floatType a, const floatType* x, const int n, floatType* y){
 }
 
 /* y <- x + ay */
-void xpay(const floatType* x, const floatType a, const int n, floatType* y){
+void xpay(const floatType* restrict x, const floatType a, const int n, floatType* restrict y){
 	int i;
 	#pragma omp parallel for default(none) private(i) shared(y,x,a)
 	for(i=0; i<n; i++){
@@ -62,9 +62,9 @@ void xpay(const floatType* x, const floatType a, const int n, floatType* y){
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* x, floatType* y){
 	int i, j, k;
-	memset(y, 0, n*sizeof(y[0]));
-	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices) collapse(2)
+	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices) 
 	for (i = 0; i < n; i++) {
+		y[i] = 0.0;
 		for (j = 0; j < length[i]; j++) {
 			k = j * n + i;
 			y[i] += data[k] * x[indices[k]];
@@ -73,7 +73,7 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data,
 }
 
 /* nrm <- ||x||_2 */
-void nrm2(const floatType* x, const int n, floatType* nrm){
+void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	int i;
 	floatType temp;
 	temp = 0;
