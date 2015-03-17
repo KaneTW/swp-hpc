@@ -33,7 +33,7 @@ void vectorDot(const floatType* a, const floatType* b, const int n, floatType* a
 	int i;
 	floatType temp;
 	temp=0;
-	#pragma omp parallel for
+	#pragma omp parallel for reduction(+:temp)
 	for(i=0; i<n; i++){
 		temp += a[i]*b[i];
 	}
@@ -43,7 +43,7 @@ void vectorDot(const floatType* a, const floatType* b, const int n, floatType* a
 /* y <- ax + y */
 void axpy(const floatType a, const floatType* x, const int n, floatType* y){
 	int i;
-	#pragma omp parallel for
+	#pragma omp parallel for default(none) private(i) shared(y,x,a)
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
 	}
@@ -52,7 +52,7 @@ void axpy(const floatType a, const floatType* x, const int n, floatType* y){
 /* y <- x + ay */
 void xpay(const floatType* x, const floatType a, const int n, floatType* y){
 	int i;
-	#pragma omp parallel for
+	#pragma omp parallel for default(none) private(i) shared(y,x,a)
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
 	}
@@ -77,7 +77,7 @@ void nrm2(const floatType* x, const int n, floatType* nrm){
 	int i;
 	floatType temp;
 	temp = 0;
-	#pragma omp parallel for
+	#pragma omp parallel for reduction(+:temp)
 	for(i = 0; i<n; i++){
 		temp+=(x[i]*x[i]);
 	}
