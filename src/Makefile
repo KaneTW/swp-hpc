@@ -1,5 +1,5 @@
 
-MAT_DIR = /home/lect0005/matrix
+MAT_DIR = /home/dk406646/swp-hpc/G3_circuit
 OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o 
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
@@ -11,7 +11,7 @@ ifeq ($(dbg),1)
 C_FLAGS = ${FLAGS_DEBUG} -DDEBUG
 endif
 
-default: cg.exe
+default: openmp
 
 openmp: C_FLAGS += ${FLAGS_OPENMP}
 openmp: cg.exe
