@@ -208,9 +208,9 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 /* Free the complete memory of the matrix in ELLPACK-R format */
 void destroyMatrix(floatType* data, int* indices, int* length) {
-	free(data);
-	free(indices);
-	free(length);
+	_mm_free(data);
+	_mm_free(indices);
+	_mm_free(length);
 }
 
 /* Print out to std the first n elements of the vector x */

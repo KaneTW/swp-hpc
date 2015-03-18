@@ -52,7 +52,7 @@ void axpy(const floatType a, const floatType* restrict x, const int n, floatType
 	int i;
 	__assume_aligned(x, 64);
 	__assume_aligned(y, 64);
-	#pragma omp parallel for default(none) private(i) shared(y,x,a)
+	#pragma omp parallel for default(none) private(i) firstprivate(y,x,a)
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
 	}
@@ -63,7 +63,7 @@ void xpay(const floatType* restrict x, const floatType a, const int n, floatType
 	int i;
 	__assume_aligned(x, 64);
 	__assume_aligned(y, 64);
-	#pragma omp parallel for default(none) private(i) shared(y,x,a)
+	#pragma omp parallel for default(none) private(i) firstprivate(y,x,a)
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
 	}
@@ -72,18 +72,19 @@ void xpay(const floatType* restrict x, const floatType a, const int n, floatType
 /* y <- A*x
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict x, floatType* restrict y){
-	int i, j, k;
+	int row, col, idx;
 	__assume_aligned(x, 64);
 	__assume_aligned(y, 64);
 	__assume_aligned(data, 64);
 	__assume_aligned(indices, 64);
 	__assume_aligned(length, 64);
-	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices) 
-	for (i = 0; i < n; i++) {
-		y[i] = 0.0;
-		for (j = 0; j < length[i]; j++) {
-			k = j * n + i;
-			y[i] += data[k] * x[indices[k]];
+
+	#pragma omp parallel for default(none) private(row, col, idx) firstprivate(n, length, data, x, indices, y)
+	for (row = 0; row < n; row++) {
+		y[row] = 0;
+		for (col = 0; col < length[row]; col++) {
+			idx = col*n + row;
+			y[row] += data[idx] * x[indices[idx]];
 		}
 	}
 }
@@ -94,7 +95,7 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	floatType temp;
 	temp = 0;
 	__assume_aligned(x, 64);
-	#pragma omp parallel for reduction(+:temp)
+	#pragma omp parallel for reduction(+:temp) default(none) private(i) firstprivate(n,x)
 	for(i = 0; i<n; i++){
 		temp+=(x[i]*x[i]);
 	}
@@ -228,7 +229,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	sc->timeMatvec = timeMatvec;
 
 	/* Clean up */
-	free(r);
-	free(p);
-	free(q);
+	_mm_free(r);
+	_mm_free(p);
+	_mm_free(q);
 }

@@ -126,7 +126,8 @@ int main(int argc, char *argv[]){
 	 * A.length  | 1| 2| 2| 3| */
 	int n;            
 	int nnz;           
-	int maxNNZ;
+	int maxNNZ, minNNZ;
+	double avgNNZ;
 	floatType* data = NULL;
 	int* indices = NULL;
 	int* length = NULL;
@@ -182,9 +183,23 @@ int main(int argc, char *argv[]){
 
 	totalLength = 0;
 	int i;
+#ifdef COL_FIRST
 	for (i = 0; i < n; i++) {
 		totalLength += length[i];
 	}
+#else
+	totalLength = n*maxNNZ;
+#endif
+	minNNZ = maxNNZ;
+	avgNNZ = 0.0;
+	for (i = 0; i < n; i++) {
+		if(length[i] < minNNZ) {
+			minNNZ = length[i];
+		}
+		avgNNZ += length[i];
+	}
+
+	avgNNZ /= n;
 	
 	flops = (totalLength*4 + 9*n + 4*sc.iter*(totalLength*4 + 15*n))/solveTime;
 	flops /= 1000000000; // gflops (was mflops)
@@ -218,8 +233,8 @@ int main(int argc, char *argv[]){
 
 
 	/* Clean up */
-	free(b);
-	free(x);
+	_mm_free(b);
+	_mm_free(x);
 	destroyMatrix(data, indices, length);
 
 	totalTime = getWTime() - totalTime;
@@ -229,6 +244,9 @@ int main(int argc, char *argv[]){
 	    argv,
 	    "NNZ", 'i', nnz,
 	    "N", 'i', n,
+	    "maxNNZ", 'i', maxNNZ,
+	    "minNNZ", 'i', minNNZ,
+	    "avgNNZ", 'f', avgNNZ,
 	    "Max. iterations", 'i', sc.maxIter,
 	    "Tolerance", 'e', sc.tolerance,
 	    "Residual", 'e', sc.residual,
