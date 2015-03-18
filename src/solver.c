@@ -60,7 +60,7 @@ void xpay(const floatType* restrict x, const floatType a, const int n, floatType
 
 /* y <- A*x
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
-void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* x, floatType* y){
+void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict x, floatType* restrict y){
 	int i, j, k;
 	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices) 
 	for (i = 0; i < n; i++) {
