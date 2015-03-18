@@ -78,18 +78,11 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 	__assume_aligned(data, 64);
 	__assume_aligned(indices, 64);
 	__assume_aligned(length, 64);
-	#pragma omp parallel for default(none) private(i)
-	for (i=0; i < n; i++) {
+	#pragma omp parallel for default(none) private(i, j, k) shared(n, length, data, y, x, indices) 
+	for (i = 0; i < n; i++) {
 		y[i] = 0.0;
-	}
-
-	#pragma omp parallel for default(none) private(i, j, k) shared(n, maxNNZ, data, y, x, indices) 
-	for (j = 0; j < maxNNZ; j++) { // let's see how this works out
-		for (i = 0; i < n; i++) {
+		for (j = 0; j < length[i]; j++) {
 			k = j * n + i;
-			if (data[k] == 0) {
-				break;
-			}
 			y[i] += data[k] * x[indices[k]];
 		}
 	}
