@@ -187,7 +187,7 @@ int main(int argc, char *argv[]){
 	}
 	
 	flops = (totalLength*4 + 9*n + 4*sc.iter*(totalLength*4 + 15*n))/solveTime;
-	flops /= 1000000; // gflops
+	flops /= 1000000000; // gflops (was mflops)
 
 	/* Print solution vector x or the first 10 values of the result. 
 	 * Should be 1 in case of convergence. */
