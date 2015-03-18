@@ -157,8 +157,8 @@ int main(int argc, char *argv[]){
 	ioTime = getWTime() - ioTime;
 
 	/* Allocate memory for the LGS */
-	b = (floatType*)malloc(n * sizeof(floatType));
-	x = (floatType*)malloc(n * sizeof(floatType));
+	b = (floatType*)_mm_malloc(n * sizeof(floatType), 64);
+	x = (floatType*)_mm_malloc(n * sizeof(floatType), 64);
 
 	/* Init the LGS */
 	initLGS(n, nnz, maxNNZ, data, indices, length, b, x);

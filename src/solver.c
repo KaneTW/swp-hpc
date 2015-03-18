@@ -24,6 +24,10 @@
 # include <cuda.h>
 #endif
 
+ #ifdef OPENMP
+ #include "zmmintrin.h"
+ #endif
+
 #include "solver.h"
 #include "output.h"
 
@@ -33,6 +37,9 @@ void vectorDot(const floatType* restrict a, const floatType* restrict b, const i
 	int i;
 	floatType temp;
 	temp=0;
+	__assume_aligned(a, 64);
+	__assume_aligned(b, 64);
+	__assume_aligned(ab, 64);
 	#pragma omp parallel for reduction(+:temp)
 	for(i=0; i<n; i++){
 		temp += a[i]*b[i];
@@ -43,6 +50,8 @@ void vectorDot(const floatType* restrict a, const floatType* restrict b, const i
 /* y <- ax + y */
 void axpy(const floatType a, const floatType* restrict x, const int n, floatType* restrict y){
 	int i;
+	__assume_aligned(x, 64);
+	__assume_aligned(y, 64);
 	#pragma omp parallel for default(none) private(i) shared(y,x,a)
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
@@ -52,6 +61,8 @@ void axpy(const floatType a, const floatType* restrict x, const int n, floatType
 /* y <- x + ay */
 void xpay(const floatType* restrict x, const floatType a, const int n, floatType* restrict y){
 	int i;
+	__assume_aligned(x, 64);
+	__assume_aligned(y, 64);
 	#pragma omp parallel for default(none) private(i) shared(y,x,a)
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
@@ -62,6 +73,11 @@ void xpay(const floatType* restrict x, const floatType a, const int n, floatType
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict x, floatType* restrict y){
 	int i, j, k;
+	__assume_aligned(x, 64);
+	__assume_aligned(y, 64);
+	__assume_aligned(data, 64);
+	__assume_aligned(indices, 64);
+	__assume_aligned(length, 64);
 	#pragma omp parallel for default(none) private(i)
 	for (i=0; i < n; i++) {
 		y[i] = 0.0;
@@ -84,6 +100,7 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	int i;
 	floatType temp;
 	temp = 0;
+	__assume_aligned(x, 64);
 	#pragma omp parallel for reduction(+:temp)
 	for(i = 0; i<n; i++){
 		temp+=(x[i]*x[i]);
@@ -122,9 +139,9 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
  	double timeMatvec=0;
 	
 	/* allocate memory */
-	r = (floatType*)malloc(n * sizeof(floatType));
-	p = (floatType*)malloc(n * sizeof(floatType));
-	q = (floatType*)malloc(n * sizeof(floatType));
+	r = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
+	p = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
+	q = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
 	
 	DBGMAT("Start matrix A = ", n, nnz, maxNNZ, data, indices, length)
 	DBGVEC("b = ", b, n);

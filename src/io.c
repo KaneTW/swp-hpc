@@ -90,7 +90,7 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 
 	/* Allocate some of the memory for the ELLPACK-R matrix */
-	*length = (int*) malloc(sizeof(int) * N);
+	*length = (int*) _mm_malloc(sizeof(int) * N, 64);
 
 	/* Check if the memory was allocated successfully */
 	if (*length == NULL) {
@@ -168,8 +168,8 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	}
 
 	/* Allocate the rest of the memory for the ELLPACK-R matrix */
-	*data = (floatType*) malloc(sizeof(floatType) * N * (*maxNNZ));
-	*indices = (int*) malloc(sizeof(int) * N * (*maxNNZ));
+	*data = (floatType*) _mm_malloc(sizeof(floatType) * N * (*maxNNZ), 64);
+	*indices = (int*) _mm_malloc(sizeof(int) * N * (*maxNNZ), 64);
 
 	/* Check if the memory was allocated successfully */
 	if (*data == NULL || *indices == NULL) {
