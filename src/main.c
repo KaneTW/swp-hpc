@@ -39,7 +39,7 @@
  * method. For the error checking it is enought to check the residual. */
 void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, floatType* b, floatType* x){
 	int i,j,sum;
-	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data) schedule(static) proc_bind(spread) default(none)
+	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data) schedule(static) default(none)
 	for(i = 0; i < n; i++){
 		x[i] = 0;
 		sum = 0;
