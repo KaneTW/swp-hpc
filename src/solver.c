@@ -33,7 +33,7 @@ void vectorDot(const floatType* restrict a, const floatType* restrict b, const i
 	int i;
 	floatType temp;
 	temp=0;
-	#pragma omp parallel for reduction(+:temp) schedule(static) default(none) private(i) shared(a,b,n) proc_bind(spread)
+	#pragma omp parallel for reduction(+:temp) schedule(static) default(none) private(i) shared(a,b,n) 
 	for(i=0; i<n; i++){
 		temp += a[i]*b[i];
 	}
@@ -43,7 +43,7 @@ void vectorDot(const floatType* restrict a, const floatType* restrict b, const i
 /* y <- ax + y */
 void axpy(const floatType a, const floatType* restrict x, const int n, floatType* restrict y){
 	int i;
-	#pragma omp parallel for default(none) private(i) shared(y,x,a) schedule(static) proc_bind(spread)
+	#pragma omp parallel for default(none) private(i) shared(y,x,a) schedule(static) 
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
 	}
@@ -52,7 +52,7 @@ void axpy(const floatType a, const floatType* restrict x, const int n, floatType
 /* y <- x + ay */
 void xpay(const floatType* restrict x, const floatType a, const int n, floatType* restrict y){
 	int i;
-	#pragma omp parallel for default(none) private(i) shared(y,x,a) schedule(static) proc_bind(spread)
+	#pragma omp parallel for default(none) private(i) shared(y,x,a) schedule(static) 
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
 	}
@@ -64,7 +64,7 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 	int row, col, idx;
 	floatType sum;
 
-	#pragma omp parallel for default(none) private(row, col, idx, sum) shared(n, length, data, x, indices, y) schedule(static) proc_bind(spread)
+	#pragma omp parallel for default(none) private(row, col, idx, sum) shared(n, length, data, x, indices, y) schedule(static) 
 	for (row = 0; row < n; row++) {
 		sum = 0;
 		for (col = 0; col < length[row]; col++) {
@@ -81,7 +81,7 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	floatType temp;
 	temp = 0;
 
-	#pragma omp parallel for reduction(+:temp) default(none) private(i) shared(n, x) schedule(static) proc_bind(spread)
+	#pragma omp parallel for reduction(+:temp) default(none) private(i) shared(n, x) schedule(static) 
 	for(i = 0; i<n; i++){
 		temp+=(x[i]*x[i]);
 	}
@@ -141,7 +141,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 
 	/* p(0)    = r(0) */
 	int i;
-	#pragma omp parallel for default(none) schedule(static) private(i) shared(n,p,r) proc_bind(spread)
+	#pragma omp parallel for default(none) schedule(static) private(i) shared(n,p,r) 
 	for (i=0; i < n; i++) {
 		p[i] = r[i];
 	}
