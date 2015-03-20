@@ -38,7 +38,7 @@ floatType get_residual(const int n, const int nnz, const int maxNNZ, const float
 	for (i = 0; i < n; i++) {
 		y[i] = 0;
 		for (j = 0; j < length[i]; j++) {
-			k = j * n + i;
+			k = j + i*maxNNZ;
 			y[i] += data[k] * x[indices[k]];
 		}
 	}
