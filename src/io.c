@@ -101,7 +101,7 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	/* Initialize the length pointer of the matrix */
 	// ensure data locality
 	#pragma omp parallel for private(i) firstprivate(N, length) schedule(static)
-	for (i = 0; i < N + 1; i++) {
+	for (i = 0; i < N; i++) {
 		(*length)[i] = 0;
 	}
 
@@ -195,14 +195,15 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	#pragma omp parallel for private(i, j, off) shared(N, length, nnz, data, indices, offset) schedule(static)
 	for (j = 0; j < (*nnz); j++){
 		i = I[j];
-		#pragma omp atomic read
-		off = offset[i];
-		/* Store data and indices in column-major order */
-		(*data)[off * N + i] = V[j];
-		(*indices)[off* N + i] = J[j];
+		#pragma omp critical
+		{
+			off = offset[i];
+			/* Store data and indices in column-major order */
+			(*data)[off * N + i] = V[j];
+			(*indices)[off * N + i] = J[j];
+			offset[i]++;
+		}
 		
-		#pragma omp atomic update
-		offset[i]++;
 	}
 
 	printf("MM Parse done.\n");

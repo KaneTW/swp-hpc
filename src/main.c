@@ -189,7 +189,7 @@ int main(int argc, char *argv[]){
 	solveTime = getWTime()-solveTime;
 	
 	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
-
+	/* update: add (2n)+iter*(2n)*/
 	totalLength = 0;
 	for (i = 0; i < n; i++) {
 		totalLength += length[i];
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]){
 
 	avgNNZ /= n;
 	
-	flops = (totalLength*4 + 9*n + 4*sc.iter*(totalLength*4 + 15*n))/solveTime;
+	flops = (totalLength*4 + 11*n + 4*sc.iter*(totalLength*4 + 17*n))/solveTime;
 	flops /= 1000000000; // gflops (was mflops)
 
 	/* Print solution vector x or the first 10 values of the result. 

@@ -88,6 +88,41 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	*nrm=sqrt(temp);
 }
 
+void diagInvMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out) {
+	int i;
+	#pragma omp parallel for default(none) private(i) shared(diag, x, n , out) schedule(static) 
+	for (i = 0; i < n; i++) {
+		out[i] = x[i]/diag[i];
+	}
+}
+
+#if 0 // fix cholesky
+void computeCholesky(const int n, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, floatType* restrict icfData) {
+	int col, row, idx, k, realcol;
+	floatType s, cur;
+	for (row = 0; row < n; row++) {
+		s = 0;
+		for (col = 0; col < length[row]; col++) {
+			idx = col*n + row;
+			realcol = indices[idx];
+			if (realcol < row) {
+				s += icfData[idx]*icfData[idx];
+			}
+			else if (row == realcol) {
+				cur = sqrt(data[idx] - s);
+				icfData[idx] = cur;
+				for (k = col + 1; k < maxNNZ; k++) {
+					icfData[k*n+row] = (data[k*n+row] - icfData)/cur;
+				}
+				s = 0;
+
+			} else {
+				break;
+			}
+		}
+	}
+}
+#endif 
 
 /***************************************
  *         Conjugate Gradient          *
@@ -112,9 +147,9 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
    p(k+1)    = r(k+1) + beta*p(k)      
 ***************************************/
 void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* b, floatType* x, struct SolverConfig* sc){
-	floatType* r, *p, *q;
-	floatType alpha, beta, rho, rho_old, dot_pq, bnrm2;
-	int iter;
+	floatType* r, *p, *q, *diag, *z;
+	floatType alpha, beta, rho, rho_old, check, dot_pq, bnrm2, rz;
+	int iter, i, j;
  	double timeMatvec_s;
  	double timeMatvec=0;
 	
@@ -122,8 +157,39 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	r = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
 	p = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
 	q = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
-	
+	z = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
+	diag = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
+	#if 0 // cholesky
+	icfData = (floatType*)_mm_malloc(n*maxNNZ*sizeof(floatType), 64);
+
+	// numa stuff
+	#pragma omp parallel for default(none) schedule(static) private(i, j) shared(n,maxNNZ, length, icfData)
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < length[i]; j++) {
+			icfData[j*n+i] = 0;
+		}
+	}
+
+	computeCholesky(n, maxNNZ, data, indices, length, icfData);
+	#endif
+
+	#pragma omp parallel for default(none) schedule(static) private(i,j), shared(n, diag, data, length, indices)
+	for (i = 0; i < n; i++) {
+		diag[i] = 1;
+		for (j = 0; j < length[i]; j++) {
+			int idx = j*n+i;
+			int realcol = indices[j*n+i];
+			if (i == realcol) {
+				diag[i] = data[idx];
+			}
+		}
+		if (diag[i] == 0) {
+			printf("diag[%d]: PANIC", i);
+		}
+	}
+
 	DBGMAT("Start matrix A = ", n, nnz, maxNNZ, data, indices, length)
+	DBGVEC("diag = ", diag, n);
 	DBGVEC("b = ", b, n);
 	DBGVEC("x = ", x, n);
 
@@ -133,23 +199,26 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	timeMatvec += getWTime() - timeMatvec_s;
 	xpay(b, -1.0, n, r);
 	DBGVEC("r = b - Ax = ", r, n);
-	
+
+	/* z0 = M^-1r0 */
+	diagInvMult(diag, r, n, z);
 
 	/* Calculate initial residuum */
 	nrm2(r, n, &bnrm2);
-	bnrm2 = 1.0 /bnrm2;
+	bnrm2 = 1.0/bnrm2;
 
-	/* p(0)    = r(0) */
-	int i;
-	#pragma omp parallel for default(none) schedule(static) private(i) shared(n,p,r) 
+	/* p(0)    = z(0) */
+	#pragma omp parallel for default(none) schedule(static) private(i) shared(n,p,z) 
 	for (i=0; i < n; i++) {
-		p[i] = r[i];
+		p[i] = z[i];
 	}
+
 	DBGVEC("p = r = ", p, n);
 
-	/* rho(0)    =  <r(0),r(0)> */
-	vectorDot(r, r, n, &rho);
-	printf("rho_0=%e\n", rho);
+	/* rho(0)    =  <r(0),z(0)>, check(0) = <r(0),r(0)> */
+	vectorDot(r, z, n, &rho);
+	vectorDot(r, r, n, &check);
+	printf("rho_0=%e/%e\n", rho, check);
 
 	for(iter = 0; iter < sc->maxIter; iter++){
 		DBGMSG("=============== Iteration %d ======================\n", iter);
@@ -176,20 +245,13 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		axpy(-alpha, q, n, r);
 		DBGVEC("r = r - alpha * q= ", r, n);
 
+		/* z(k+1) = M^-1r(k+1) */
+		diagInvMult(diag, r, n, z);
 
-		rho_old = rho;
-		DBGSCA("rho_old = rho = ", rho_old);
-
-
-		/* rho(k+1)  = <r(k+1), r(k+1)> */
-		vectorDot(r, r, n, &rho);
-		DBGSCA("rho = <r, r> = ", rho);
-
+		vectorDot(r, r, n, &check);
 		/* Normalize the residual with initial one */
-		sc->residual= sqrt(rho) * bnrm2;
+		sc->residual = sqrt(check) * bnrm2;
 
-
-   	
 		/* Check convergence ||r(k+1)||_2 < eps
 		 * If the residual is smaller than the CG
 		 * tolerance specified in the CG_TOLERANCE
@@ -200,14 +262,20 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		if(sc->residual <= sc->tolerance)
 			break;
 
+		rho_old = rho;
+		DBGSCA("rho_old = rho = ", rho_old);
+
+		/* rho(k+1)  = <r(k+1), z(k+1)> */
+		vectorDot(r, z, n, &rho);
+		DBGSCA("rho = <r, z> = ", rho);
 
 		/* beta      = rho(k+1) / rho(k) */
 		beta = rho / rho_old;
 		DBGSCA("beta = rho / rho_old= ", beta);
 
-		/* p(k+1)    = r(k+1) + beta*p(k) */
-		xpay(r, beta, n, p);
-		DBGVEC("p = r + beta * p> = ", p, n);
+		/* p(k+1)    = z(k+1) + beta*p(k) */
+		xpay(z, beta, n, p);
+		DBGVEC("p = z + beta * p> = ", p, n);
 
 	}
 
@@ -222,4 +290,6 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	_mm_free(r);
 	_mm_free(p);
 	_mm_free(q);
+	_mm_free(diag);
+	_mm_free(z);
 }
