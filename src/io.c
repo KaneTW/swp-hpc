@@ -192,11 +192,11 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 	/* Convert from MM to ELLPACK-R */
 	int off;
-	#pragma omp parallel for private(i, j, off) shared(N, length, nnz, data, indices, offset) schedule(static)
+	#pragma omp parallel for private(i, j, off) shared(N, length, nnz, data, indices, offset) schedule(static) ordered
 	for (j = 0; j < (*nnz); j++){
-		i = I[j];
-		#pragma omp critical
+		#pragma omp ordered
 		{
+			i = I[j];
 			off = offset[i];
 			/* Store data and indices in column-major order */
 			(*data)[off * N + i] = V[j];
