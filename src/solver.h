@@ -19,12 +19,12 @@
 #ifdef __cplusplus
 	extern "C" {
 #endif
-	void vectorDot(const floatType* a, const floatType* b, const int n, floatType* ab);
-	void axpy(const floatType a, const floatType* x, const int n, floatType* y);
-	void xpay(const floatType* x, const floatType a, const int n, floatType* y);
-	void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* x, floatType* y);
-	void nrm2(const floatType* x, const int n, floatType* nrm);
-	void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* b, floatType* x, struct SolverConfig* sc);
+	void vectorDot(const floatType* restrict a, const floatType* b, const int n, floatType* restrict ab);
+	void axpy(const floatType a, const floatType* restrict x, const int n, floatType* restrict y);
+	void xpay(const floatType* restrict x, const floatType a, const int n, floatType* restrict y);
+	void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict x, floatType* restrict y);
+	void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm);
+	void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict b, floatType* restrict x, struct SolverConfig* sc);
 #ifdef __cplusplus
 	}
 #endif

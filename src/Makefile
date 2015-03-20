@@ -51,7 +51,7 @@ run: openmp
 	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
 
 run_serena: openmp
-	CG_MAX_ITER=20000 OMP_NUM_THREADS=64 ./cg.exe $(MAT_DIR)/Serena.mtx
+	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/Serena.mtx
 
 run_debug: openmp
 	CG_MAX_ITER=100 OMP_NUM_THREADS=6 OMP_PLACES=cores ./cg.exe debug.mtx

@@ -92,7 +92,7 @@ void diagInvMult(const floatType* restrict diag, const floatType* restrict x, co
 	int i;
 	#pragma omp parallel for default(none) private(i) shared(diag, x, n , out) schedule(static) 
 	for (i = 0; i < n; i++) {
-		out[i] = x[i]/diag[i];
+		out[i] = x[i]*diag[i];
 	}
 }
 
@@ -180,7 +180,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 			int idx = j*n+i;
 			int realcol = indices[j*n+i];
 			if (i == realcol) {
-				diag[i] = data[idx];
+				diag[i] = 1.0/data[idx];
 			}
 		}
 		if (diag[i] == 0) {

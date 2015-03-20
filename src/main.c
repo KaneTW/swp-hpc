@@ -38,16 +38,17 @@
  * errors this solution will not be reached for the implemented cg
  * method. For the error checking it is enought to check the residual. */
 void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, floatType* b, floatType* x){
-	int i,j,sum;
-	int64_t wtf = 0;
-	#pragma omp parallel for private(i, j) shared(wtf, length,x,b,data) schedule(static) default(none)
+	int i,j;
+	double sum;
+	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data) schedule(static) default(none)
 	for(i = 0; i < n; i++){
 		x[i] = 0;
+		sum = 0;
 		// emulating default memset behaviour since it provides better convergence what the fuck
-		b[i] = *((double*)&wtf); 
 		for (j = 0; j < length[i]; j++) {
-			b[i] += data[j * n + i];
+			sum += data[j * n + i];
 		}
+		b[i] = sum;
 	}
 }
 
