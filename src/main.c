@@ -39,15 +39,15 @@
  * method. For the error checking it is enought to check the residual. */
 void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, floatType* b, floatType* x){
 	int i,j,sum;
-	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data) schedule(static) default(none)
+	int64_t wtf = 0;
+	#pragma omp parallel for private(i, j) shared(wtf, length,x,b,data) schedule(static) default(none)
 	for(i = 0; i < n; i++){
 		x[i] = 0;
-		sum = 0;
-
+		// emulating default memset behaviour since it provides better convergence what the fuck
+		b[i] = *((double*)&wtf); 
 		for (j = 0; j < length[i]; j++) {
-			sum += data[j * n + i];
+			b[i] += data[j * n + i];
 		}
-		b[i] = sum;
 	}
 }
 
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]){
 	struct SolverConfig sc;
 	floatType *b, *x;
 	floatType residual, bnrm2;
-	int correct;
+	int correct, i;
 	unsigned long long totalLength; // int's too small
 	double flops;
 	double ioTime, solveTime, totalTime;
@@ -166,6 +166,12 @@ int main(int argc, char *argv[]){
 
 	/* Init the LGS */
 	initLGS(n, nnz, maxNNZ, data, indices, length, b, x);
+	// what the fuck
+	#if 0
+	for(i = 0; i < n; i++) {
+		printf("b[%d] = %f\n", i, b[i]);
+	}
+	#endif
 
 	/* Calculate the initial residuum for error checking */
 	bnrm2 = get_residual(n, nnz, maxNNZ, data, indices, length, b, x);
@@ -185,7 +191,6 @@ int main(int argc, char *argv[]){
 	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
 
 	totalLength = 0;
-	int i;
 	for (i = 0; i < n; i++) {
 		totalLength += length[i];
 	}
