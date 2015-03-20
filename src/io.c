@@ -99,6 +99,8 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	}
 
 	/* Initialize the length pointer of the matrix */
+	// ensure data locality
+	#pragma omp parallel for private(i) firstprivate(N, length) schedule(static)
 	for (i = 0; i < N + 1; i++) {
 		(*length)[i] = 0;
 	}
@@ -177,23 +179,30 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 		exit(1);
 	}
 
-	/* Convert from MM to ELLPACK-R */
-	for (j = 0; j < (*nnz); j++){
-		i = I[j];
 
-		/* Store data and indices in column-major order */
-		(*data)[offset[i] * N + i] = V[j];
-		(*indices)[offset[i] * N + i] = J[j];
-		
-		offset[i]++;
-	}
-
-	/* Insert 0's for padding in data and indices array */
+	/* NUMA locality */
+	#pragma omp parallel for private(i,j) shared(N,maxNNZ,data,indices) schedule(static)
 	for (i = 0; i < N; i++) {
-		for (j = (*length)[i]; j < (*maxNNZ); j++) {
+		for (j = 0; j < (*maxNNZ); j++) {
 			(*data)[j * N + i] = 0.0;
 			(*indices)[j * N + i] = 0;
 		}
+	}
+
+
+	/* Convert from MM to ELLPACK-R */
+	int off;
+	#pragma omp parallel for private(i, j, off) shared(N, length, nnz, data, indices, offset) schedule(static)
+	for (j = 0; j < (*nnz); j++){
+		i = I[j];
+		#pragma omp atomic read
+		off = offset[i];
+		/* Store data and indices in column-major order */
+		(*data)[off * N + i] = V[j];
+		(*indices)[off* N + i] = J[j];
+		
+		#pragma omp atomic update
+		offset[i]++;
 	}
 
 	printf("MM Parse done.\n");

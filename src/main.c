@@ -38,13 +38,16 @@
  * errors this solution will not be reached for the implemented cg
  * method. For the error checking it is enought to check the residual. */
 void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, floatType* b, floatType* x){
-	int i,j;
-	memset(b, 0, n * sizeof(floatType));
+	int i,j,sum;
+	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data) schedule(static) proc_bind(spread) default(none)
 	for(i = 0; i < n; i++){
 		x[i] = 0;
+		sum = 0;
+
 		for (j = 0; j < length[i]; j++) {
-			b[i] += data[j * n + i];
+			sum += data[j * n + i];
 		}
+		b[i] = sum;
 	}
 }
 
@@ -183,13 +186,9 @@ int main(int argc, char *argv[]){
 
 	totalLength = 0;
 	int i;
-#ifdef COL_FIRST
 	for (i = 0; i < n; i++) {
 		totalLength += length[i];
 	}
-#else
-	totalLength = n*maxNNZ;
-#endif
 	minNNZ = maxNNZ;
 	avgNNZ = 0.0;
 	for (i = 0; i < n; i++) {
