@@ -68,7 +68,7 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 	for (row = 0; row < n; row++) {
 		sum = 0;
 		for (col = 0; col < length[row]; col++) {
-			idx = col*n + row;
+			idx = col + row*maxNNZ;
 			sum += data[idx] * x[indices[idx]];
 		}
 		y[row] = sum;
@@ -177,8 +177,8 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	for (i = 0; i < n; i++) {
 		diag[i] = 1;
 		for (j = 0; j < length[i]; j++) {
-			int idx = j*n+i;
-			int realcol = indices[j*n+i];
+			int idx = j+i*maxNNZ;
+			int realcol = indices[idx];
 			if (i == realcol) {
 				diag[i] = 1.0/data[idx];
 			}

@@ -46,7 +46,7 @@ void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data
 		sum = 0;
 		// emulating default memset behaviour since it provides better convergence what the fuck
 		for (j = 0; j < length[i]; j++) {
-			sum += data[j * n + i];
+			sum += data[j + i * maxNNZ];
 		}
 		b[i] = sum;
 	}

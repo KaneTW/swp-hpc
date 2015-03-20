@@ -184,8 +184,8 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	#pragma omp parallel for private(i,j) shared(N,maxNNZ,data,indices) schedule(static)
 	for (i = 0; i < N; i++) {
 		for (j = 0; j < (*maxNNZ); j++) {
-			(*data)[j * N + i] = 0.0;
-			(*indices)[j * N + i] = 0;
+			(*data)[j + i * (*maxNNZ)] = 0.0;
+			(*indices)[j + i * (*maxNNZ)] = 0;
 		}
 	}
 
@@ -198,9 +198,9 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 		{
 			i = I[j];
 			off = offset[i];
-			/* Store data and indices in column-major order */
-			(*data)[off * N + i] = V[j];
-			(*indices)[off * N + i] = J[j];
+			/* Store data and indices in row-major order */
+			(*data)[off + i*(*maxNNZ)] = V[j];
+			(*indices)[off + i*(*maxNNZ)] = J[j];
 			offset[i]++;
 		}
 		
