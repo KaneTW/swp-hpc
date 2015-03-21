@@ -1,10 +1,11 @@
-
+SHELL = /bin/bash
 MAT_DIR = /home/dk406646/swp-hpc/G3_circuit
 OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o 
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = ${FLAGS_FAST} -restrict -g -opt-subscript-in-range -vec_report=2
+C_FLAGS = -qopt-report -fno-alias -use-intel-optimized-headers -no-prec-div -O3 -prof-use -prof-dir=pgo -ip -ipo -axCORE-AVX2,AVX,SSE4.2,SSE4.1 -fp-model fast=2 -restrict -Wall -opt-subscript-in-range
+
 LINKER = ${CC}
 
 ifeq ($(dbg),1)
@@ -34,7 +35,7 @@ cuda: C_FLAGS = -g
 endif
 cuda: cg.exe
 
-cg.exe: ${OBJ}
+cg.exe: intel15 ${OBJ}
 	${LINKER} ${C_FLAGS} -o cg.exe ${OBJ} ${LINKER_FLAGS} 
 
 %.o: %.c
@@ -51,10 +52,15 @@ run: openmp
 	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
 
 run_serena: openmp
-	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/Serena.mtx
+	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=64 ./cg.exe $(MAT_DIR)/Serena.mtx
 
 run_debug: openmp
 	CG_MAX_ITER=100 OMP_NUM_THREADS=6 OMP_PLACES=cores ./cg.exe debug.mtx
+
+.PHONY: clean intel15
+
+intel15:
+	module switch intel intel/15.0
 
 clean:
 	rm -f cg.exe

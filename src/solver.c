@@ -24,6 +24,7 @@
 # include <cuda.h>
 #endif
 
+#include "globals.h"
 #include "solver.h"
 #include "output.h"
 
@@ -32,8 +33,8 @@
 void vectorDot(const floatType* restrict a, const floatType* restrict b, const int n, floatType* restrict ab){
 	int i;
 	floatType temp;
-	temp=0;
-	#pragma omp parallel for reduction(+:temp) schedule(static) default(none) private(i) shared(a,b,n) 
+	temp = 0;
+	#pragma omp parallel for simd aligned(a:CG_ALIGN,b:CG_ALIGN) reduction(+:temp) schedule(static) private(i) shared(n) default(none)
 	for(i=0; i<n; i++){
 		temp += a[i]*b[i];
 	}
@@ -43,7 +44,7 @@ void vectorDot(const floatType* restrict a, const floatType* restrict b, const i
 /* y <- ax + y */
 void axpy(const floatType a, const floatType* restrict x, const int n, floatType* restrict y){
 	int i;
-	#pragma omp parallel for default(none) private(i) shared(y,x,a) schedule(static) 
+	#pragma omp parallel for simd aligned(x:CG_ALIGN,y:CG_ALIGN) default(none) private(i) shared(a,n) schedule(static) 
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
 	}
@@ -52,7 +53,7 @@ void axpy(const floatType a, const floatType* restrict x, const int n, floatType
 /* y <- x + ay */
 void xpay(const floatType* restrict x, const floatType a, const int n, floatType* restrict y){
 	int i;
-	#pragma omp parallel for default(none) private(i) shared(y,x,a) schedule(static) 
+	#pragma omp parallel for simd aligned(x:CG_ALIGN,y:CG_ALIGN) default(none) private(i) shared(n,a) schedule(static) 
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
 	}
@@ -64,9 +65,10 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 	int row, col, idx;
 	floatType sum;
 
-	#pragma omp parallel for default(none) private(row, col, idx, sum) shared(n, length, data, x, indices, y) schedule(static) 
+	#pragma omp parallel for default(none) private(row, col, idx, sum) shared(n, x, y, data, indices, length) schedule(static) 
 	for (row = 0; row < n; row++) {
 		sum = 0;
+		#pragma omp simd aligned(length:CG_ALIGN, data:CG_ALIGN, x: CG_ALIGN, indices:CG_ALIGN)  private(col, idx) 
 		for (col = 0; col < length[row]; col++) {
 			idx = col + row*maxNNZ;
 			sum += data[idx] * x[indices[idx]];
@@ -81,60 +83,32 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	floatType temp;
 	temp = 0;
 
-	#pragma omp parallel for reduction(+:temp) default(none) private(i) shared(n, x) schedule(static) 
+	#pragma omp parallel for simd aligned(x:CG_ALIGN) reduction(+:temp) default(none) private(i) shared(n) schedule(static) 
 	for(i = 0; i<n; i++){
 		temp+=(x[i]*x[i]);
 	}
 	*nrm=sqrt(temp);
 }
 
-void diagInvMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out) {
+void diagMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out) {
 	int i;
-	#pragma omp parallel for default(none) private(i) shared(diag, x, n , out) schedule(static) 
+	#pragma omp parallel for simd default(none) aligned(out:CG_ALIGN, x:CG_ALIGN, diag:CG_ALIGN) private(i) shared(n) schedule(static) 
 	for (i = 0; i < n; i++) {
 		out[i] = x[i]*diag[i];
 	}
 }
 
-#if 0 // fix cholesky
-void computeCholesky(const int n, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, floatType* restrict icfData) {
-	int col, row, idx, k, realcol;
-	floatType s, cur;
-	for (row = 0; row < n; row++) {
-		s = 0;
-		for (col = 0; col < length[row]; col++) {
-			idx = col*n + row;
-			realcol = indices[idx];
-			if (realcol < row) {
-				s += icfData[idx]*icfData[idx];
-			}
-			else if (row == realcol) {
-				cur = sqrt(data[idx] - s);
-				icfData[idx] = cur;
-				for (k = col + 1; k < maxNNZ; k++) {
-					icfData[k*n+row] = (data[k*n+row] - icfData)/cur;
-				}
-				s = 0;
-
-			} else {
-				break;
-			}
-		}
-	}
-}
-#endif 
-
-/***************************************
- *         Conjugate Gradient          *
- *   This function will do the CG      *
- *  algorithm without preconditioning. *
- *    For optimiziation you must not   *
- *        change the algorithm.        *
- ***************************************
+/*******************************************
+ *           Conjugate Gradient            *
+ *      This function will do the CG       *
+ *  algorithm with Jacobi preconditioning. *
+ *      For optimiziation you must not     *
+ *          change the algorithm.          *
+ *******************************************
  r(0)    = b - Ax(0)
  p(0)    = r(0)
  rho(0)    =  <r(0),r(0)>                
- ***************************************
+ *******************************************
  for k=0,1,2,...,n-1
    q(k)      = A * p(k)                 
    dot_pq    = <p(k),q(k)>             
@@ -152,28 +126,16 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	int iter, i, j;
  	double timeMatvec_s;
  	double timeMatvec=0;
-	
+
 	/* allocate memory */
-	r = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
-	p = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
-	q = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
-	z = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
-	diag = (floatType*)_mm_malloc (n * sizeof(floatType), 64);
-	#if 0 // cholesky
-	icfData = (floatType*)_mm_malloc(n*maxNNZ*sizeof(floatType), 64);
+	r = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
+	p = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
+	q = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
+	z = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
+	diag = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
+	printf("hi");
 
-	// numa stuff
-	#pragma omp parallel for default(none) schedule(static) private(i, j) shared(n,maxNNZ, length, icfData)
-	for (i = 0; i < n; i++) {
-		for (j = 0; j < length[i]; j++) {
-			icfData[j*n+i] = 0;
-		}
-	}
-
-	computeCholesky(n, maxNNZ, data, indices, length, icfData);
-	#endif
-
-	#pragma omp parallel for default(none) schedule(static) private(i,j), shared(n, diag, data, length, indices)
+	#pragma omp parallel for default(none) schedule(static) private(i,j) shared(n,diag,data,indices,length)
 	for (i = 0; i < n; i++) {
 		diag[i] = 1;
 		for (j = 0; j < length[i]; j++) {
@@ -182,9 +144,6 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 			if (i == realcol) {
 				diag[i] = 1.0/data[idx];
 			}
-		}
-		if (diag[i] == 0) {
-			printf("diag[%d]: PANIC", i);
 		}
 	}
 
@@ -201,14 +160,14 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	DBGVEC("r = b - Ax = ", r, n);
 
 	/* z0 = M^-1r0 */
-	diagInvMult(diag, r, n, z);
+	diagMult(diag, r, n, z);
 
 	/* Calculate initial residuum */
 	nrm2(r, n, &bnrm2);
 	bnrm2 = 1.0/bnrm2;
 
 	/* p(0)    = z(0) */
-	#pragma omp parallel for default(none) schedule(static) private(i) shared(n,p,z) 
+	#pragma omp parallel for simd default(none) schedule(static) private(i) shared(n,p,z) 
 	for (i=0; i < n; i++) {
 		p[i] = z[i];
 	}
@@ -246,7 +205,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		DBGVEC("r = r - alpha * q= ", r, n);
 
 		/* z(k+1) = M^-1r(k+1) */
-		diagInvMult(diag, r, n, z);
+		diagMult(diag, r, n, z);
 
 		vectorDot(r, r, n, &check);
 		/* Normalize the residual with initial one */

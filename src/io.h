@@ -19,7 +19,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, int** indices, int** length);
+void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** restrict data, int**  restrict indices, int** restrict length);
 void printVector(const floatType *x, int n);
 void printMatrix(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length);
 void destroyMatrix(floatType* data, int* indices, int* length);

@@ -25,6 +25,7 @@
 # include <cuda/cuda.h>
 #endif
 
+#include "globals.h"
 #include "def.h"
 #include "help.h"
 #include "solver.h"
@@ -40,7 +41,7 @@
 void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, floatType* b, floatType* x){
 	int i,j;
 	double sum;
-	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data) schedule(static) default(none)
+	#pragma omp parallel for private(i, j, sum) shared(length,x,b,data,indices) schedule(static) default(none)
 	for(i = 0; i < n; i++){
 		x[i] = 0;
 		sum = 0;
@@ -132,9 +133,9 @@ int main(int argc, char *argv[]){
 	int nnz;           
 	int maxNNZ, minNNZ;
 	double avgNNZ;
-	floatType* data = NULL;
-	int* indices = NULL;
-	int* length = NULL;
+	floatType* data;
+	int* indices = malloc(sizeof(int));
+	int* length;
 	
 
 
@@ -162,25 +163,19 @@ int main(int argc, char *argv[]){
 	ioTime = getWTime() - ioTime;
 
 	/* Allocate memory for the LGS */
-	b = (floatType*)_mm_malloc(n * sizeof(floatType), 64);
-	x = (floatType*)_mm_malloc(n * sizeof(floatType), 64);
+	b = (floatType*)_mm_malloc(n * sizeof(floatType), CG_ALIGN);
+	x = (floatType*)_mm_malloc(n * sizeof(floatType), CG_ALIGN);
 
 	/* Init the LGS */
 	initLGS(n, nnz, maxNNZ, data, indices, length, b, x);
-	// what the fuck
-	#if 0
-	for(i = 0; i < n; i++) {
-		printf("b[%d] = %f\n", i, b[i]);
-	}
-	#endif
 
-	/* Calculate the initial residuum for error checking */
-	bnrm2 = get_residual(n, nnz, maxNNZ, data, indices, length, b, x);
-	
 	/* Set the solver configuration */
 	sc.maxIter = config.maxIter;
 	sc.tolerance = config.tolerance;
 
+	/* Calculate the initial residuum for error checking */
+	bnrm2 = get_residual(n, nnz, maxNNZ, data, indices, length, b, x);
+	
 
 	/* Solving the system of linear equations including the time measurement.
 	 * You should try to optimize this time, this will be valued for the
@@ -188,13 +183,14 @@ int main(int argc, char *argv[]){
 	solveTime = getWTime();
 	cg(n, nnz, maxNNZ, data, indices, length, b, x, &sc);
 	solveTime = getWTime()-solveTime;
-	
+
 	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
 	/* update: add (2n)+iter*(2n)*/
 	totalLength = 0;
 	for (i = 0; i < n; i++) {
 		totalLength += length[i];
 	}
+
 	minNNZ = maxNNZ;
 	avgNNZ = 0.0;
 	for (i = 0; i < n; i++) {
@@ -206,8 +202,8 @@ int main(int argc, char *argv[]){
 
 	avgNNZ /= n;
 	
-	flops = (totalLength*4 + 11*n + 4*sc.iter*(totalLength*4 + 17*n))/solveTime;
-	flops /= 1000000000; // gflops (was mflops)
+	flops = 16*(sc.iter+1)*totalLength/sc.timeMatvec;
+	flops /= 1000000000; // gflops
 
 	/* Print solution vector x or the first 10 values of the result. 
 	 * Should be 1 in case of convergence. */

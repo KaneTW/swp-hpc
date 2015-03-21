@@ -25,12 +25,15 @@
 # include <sys/mman.h>
 #endif
 
+#include <omp.h>
+
+#include "globals.h"
 #include "io.h"
 #include "mmio.h"
 
 /* Parse the matrix market file "filename" and return
  * the matrix in ELLPACK-R format in A. */
-void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, int** indices, int** length){
+void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** restrict data, int** restrict indices, int** restrict length){
 	int M,N;
 	int i,j;
 	int *I, *J, *offset;
@@ -86,11 +89,15 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 		/* store upper and lower triangular */
 		(*nnz) = 2 * (*nnz) - N;
 	}
-
+#if 0
+	const int FACTOR = 4096;
+	if (N % FACTOR != 0) // test whether this improves data locality
+		N += FACTOR - (N % FACTOR);
+#endif
 
 
 	/* Allocate some of the memory for the ELLPACK-R matrix */
-	*length = (int*) _mm_malloc(sizeof(int) * N, 64);
+	*length = (int*) _mm_malloc(sizeof(int) * N, CG_ALIGN);
 
 	/* Check if the memory was allocated successfully */
 	if (*length == NULL) {
@@ -98,9 +105,11 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 		exit(1);
 	}
 
+
+
 	/* Initialize the length pointer of the matrix */
 	// ensure data locality
-	#pragma omp parallel for private(i) firstprivate(N, length) schedule(static)
+	#pragma omp parallel for private(i) firstprivate(N, length) schedule(static) default(none)
 	for (i = 0; i < N; i++) {
 		(*length)[i] = 0;
 	}
@@ -170,8 +179,8 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	}
 
 	/* Allocate the rest of the memory for the ELLPACK-R matrix */
-	*data = (floatType*) _mm_malloc(sizeof(floatType) * N * (*maxNNZ), 64);
-	*indices = (int*) _mm_malloc(sizeof(int) * N * (*maxNNZ), 64);
+	*data = (floatType*) _mm_malloc(sizeof(floatType) * N * (*maxNNZ), CG_ALIGN);
+	*indices = (int*) _mm_malloc(sizeof(int) * N * (*maxNNZ), CG_ALIGN);
 
 	/* Check if the memory was allocated successfully */
 	if (*data == NULL || *indices == NULL) {
@@ -181,7 +190,7 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 
 	/* NUMA locality */
-	#pragma omp parallel for private(i,j) shared(N,maxNNZ,data,indices) schedule(static)
+	#pragma omp parallel for private(i,j) shared(N,maxNNZ,data,indices) schedule(static) default(none)
 	for (i = 0; i < N; i++) {
 		for (j = 0; j < (*maxNNZ); j++) {
 			(*data)[j + i * (*maxNNZ)] = 0.0;
@@ -192,7 +201,7 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 	/* Convert from MM to ELLPACK-R */
 	int off;
-	#pragma omp parallel for private(i, j, off) shared(N, length, nnz, data, indices, offset) schedule(static) ordered
+	#pragma omp parallel for private(i, j, off) shared(maxNNZ, I, J, V, N, length, nnz, data, indices, offset) schedule(static) ordered default(none)
 	for (j = 0; j < (*nnz); j++){
 		#pragma omp ordered
 		{
