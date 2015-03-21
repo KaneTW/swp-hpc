@@ -4,7 +4,7 @@ OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = -qopt-report -fno-alias -use-intel-optimized-headers -no-prec-div -O3 -prof-use -prof-dir=pgo -ip -ipo -axCORE-AVX2,AVX,SSE4.2,SSE4.1 -fp-model fast=2 -restrict -Wall -opt-subscript-in-range
+C_FLAGS = -qopt-report -fno-alias -use-intel-optimized-headers -no-prec-div -O3 -prof-use -prof-dir=pgo -ip -ipo -axCORE-AVX2,AVX,SSE4.2,SSE4.1 -fp-model fast=2 -restrict -Wall -opt-subscript-in-range -g
 
 LINKER = ${CC}
 
@@ -15,7 +15,7 @@ endif
 default: openmp
 
 openmp: C_FLAGS += ${FLAGS_OPENMP}
-openmp: cg.exe
+openmp: intel15 cg.exe
 
 # To load the PGI compiler use: $ module switch intel pgi
 openacc: CC = pgcc
@@ -35,7 +35,7 @@ cuda: C_FLAGS = -g
 endif
 cuda: cg.exe
 
-cg.exe: intel15 ${OBJ}
+cg.exe: ${OBJ}
 	${LINKER} ${C_FLAGS} -o cg.exe ${OBJ} ${LINKER_FLAGS} 
 
 %.o: %.c
