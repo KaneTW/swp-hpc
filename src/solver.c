@@ -98,6 +98,20 @@ void diagMult(const floatType* restrict diag, const floatType* restrict x, const
 	}
 }
 
+void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, floatType* restrict diag) {
+	int i, j;
+	#pragma omp parallel for default(none) schedule(static) private(i,j) shared(n,diag,data,indices,length)
+	for (i = 0; i < n; i++) {
+		for (j = 0; j < length[i]; j++) {
+			int idx = j+i*maxNNZ;
+			int realcol = indices[idx];
+			if (i == realcol) {
+				diag[i] = 1.0/data[idx];
+			}
+		}
+	}
+}
+
 /*******************************************
  *           Conjugate Gradient            *
  *      This function will do the CG       *
@@ -120,6 +134,7 @@ void diagMult(const floatType* restrict diag, const floatType* restrict x, const
    beta      = rho(k+1) / rho(k)
    p(k+1)    = r(k+1) + beta*p(k)      
 ***************************************/
+#pragma optimization_level 0 // bug with optimizations here, idk why
 void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* b, floatType* x, struct SolverConfig* sc){
 	floatType* r, *p, *q, *diag, *z;
 	floatType alpha, beta, rho, rho_old, check, dot_pq, bnrm2, rz;
@@ -133,19 +148,9 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	q = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
 	z = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
 	diag = (floatType*)_mm_malloc (n * sizeof(floatType), CG_ALIGN);
-	printf("hi");
 
-	#pragma omp parallel for default(none) schedule(static) private(i,j) shared(n,diag,data,indices,length)
-	for (i = 0; i < n; i++) {
-		diag[i] = 1;
-		for (j = 0; j < length[i]; j++) {
-			int idx = j+i*maxNNZ;
-			int realcol = indices[idx];
-			if (i == realcol) {
-				diag[i] = 1.0/data[idx];
-			}
-		}
-	}
+	getDiag(n, nnz, maxNNZ, data, indices, length, diag);
+
 
 	DBGMAT("Start matrix A = ", n, nnz, maxNNZ, data, indices, length)
 	DBGVEC("diag = ", diag, n);
