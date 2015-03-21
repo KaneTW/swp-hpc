@@ -61,11 +61,6 @@ run_serena: openmp
 run_debug: openmp
 	CG_MAX_ITER=100 OMP_NUM_THREADS=6 OMP_PLACES=cores ./cg.exe debug.mtx
 
-.PHONY: clean intel15
-
-intel15:
-	module switch intel intel/15.0
-
 clean:
 	rm -f cg.exe
 	rm -f *.o
