@@ -4,7 +4,7 @@ OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = -opt-prefetch -qopt-report -fno-alias -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -ip -ipo -axCORE-AVX2,AVX,SSE4.2,SSE4.1 -fp-model fast=2 -restrict -Wall -opt-subscript-in-range -g
+C_FLAGS = -static -opt-prefetch -qopt-report -fno-alias -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -ip -ipo -axCORE-AVX2,AVX,SSE4.2,SSE4.1 -fp-model fast=2 -restrict -Wall -opt-subscript-in-range -g
 
 LINKER = ${CC}
 
