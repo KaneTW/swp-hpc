@@ -27,7 +27,7 @@
 	void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm);
 	void parallelMemcpy(const floatType* restrict x, const int n, floatType* restrict y);
 	void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, floatType* restrict diag);
-	void diagMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out);
+	void diagMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out, floatType* restrict dot);
 	void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict b, floatType* restrict x, struct SolverConfig* sc);
 #ifdef __cplusplus
 	}

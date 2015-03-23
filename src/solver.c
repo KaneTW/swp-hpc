@@ -74,12 +74,18 @@ void xpay(const floatType* restrict x, const floatType a, const int n, floatType
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict x, floatType* restrict y){
 	int row;
-
+	__assume_aligned(data, CG_ALIGN);
+	__assume_aligned(indices, CG_ALIGN);
+	__assume_aligned(length, CG_ALIGN);
+	__assume_aligned(x, CG_ALIGN);
+	__assume_aligned(y, CG_ALIGN);
 	#pragma omp parallel for default(none) private(row) schedule(static) shared(x,y,data,indices,length,maxNNZ)
 	for (row = 0; row < n; row++) {
 		floatType sum = 0;
 		int col;
-		#pragma omp simd private(col) reduction(+:sum) aligned(x,data,indices,length:CG_ALIGN)
+		__assume(length[row] % 2 == 0);
+		__assume(row*maxNNZ % 2 == 0);
+		
 		for (col = 0; col < length[row]; col++) {
 			int idx = col + row*maxNNZ;
 			sum += data[idx] * x[indices[idx]];
@@ -100,18 +106,24 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	*nrm=sqrt(temp);
 }
 
-void diagMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out) {
+void diagMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out, floatType* restrict dot) {
 	int i;
+	floatType sum = 0;
 
-	#pragma omp parallel for simd aligned(x,diag,out:CG_ALIGN) default(none) private(i) schedule(static) 
+	#pragma omp parallel for simd reduction(+:sum) aligned(x,diag,out:CG_ALIGN) default(none) private(i) schedule(static) 
 	for (i = 0; i < n; i++) {
 		floatType temp = diag[i] * x[i];
 		out[i] = temp;
+		sum += temp*x[i];
 	}
+	*dot = sum;
 }
 
 void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, floatType* restrict diag) {
 	int i, j;
+	__assume_aligned(data, CG_ALIGN);
+	__assume_aligned(diag, CG_ALIGN);
+	__assume_aligned(indices, CG_ALIGN);
 
 	#pragma omp parallel for default(none) schedule(static) private(i,j) shared(diag,data,indices,maxNNZ,length)
 	for (i = 0; i < n; i++) {
@@ -185,7 +197,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	DBGVEC("r = b - Ax = ", r, n);
 
 	/* z0 = M^-1r0 */
-	diagMult(diag, r, n, z);
+	diagMult(diag, r, n, z, &rho);
 
 	/* Calculate initial residuum */
 	nrm2(r, n, &bnrm2);
@@ -195,7 +207,6 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	DBGVEC("p = z = ", p, n);
 
 	/* rho(0)    =  <r(0),z(0)>, check(0) = <r(0),r(0)> */
-	vectorDot(r, z, n, &rho);
 	vectorSquare(r, n, &check);
 	printf("rho_0=%e/%e\n", rho, check);
 	int maxIter = sc->maxIter;
@@ -224,15 +235,11 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		axpy(-alpha, q, n, r);
 		DBGVEC("r = r - alpha * q= ", r, n);
 
-		/* z(k+1) = M^-1r(k+1) */
-
-		// TODO: maybe combine diagMult and vectorDot?
-		diagMult(diag, r, n, z);
-		
 		rho_old = rho;
 		DBGSCA("rho_old = rho = ", rho_old);
 
-		vectorDot(r, z, n,  &rho);
+		/* z(k+1) = M^-1r(k+1), rho = <r,z> */
+		diagMult(diag, r, n, z, &rho);
 
 		vectorSquare(r, n, &check);
 
