@@ -45,7 +45,6 @@ void initLGS(const int n, const int nnz, const int maxNNZ, const floatType* data
 	for(i = 0; i < n; i++){
 		x[i] = 0;
 		sum = 0;
-		// emulating default memset behaviour since it provides better convergence what the fuck
 		for (j = 0; j < length[i]; j++) {
 			sum += data[j + i * maxNNZ];
 		}
@@ -133,9 +132,9 @@ int main(int argc, char *argv[]){
 	int nnz;           
 	int maxNNZ, minNNZ;
 	double avgNNZ;
-	floatType* data;
-	int* indices = malloc(sizeof(int));
-	int* length;
+	floatType* data = NULL;
+	int* indices = NULL;
+	int* length = NULL;
 	
 
 

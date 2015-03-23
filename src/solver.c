@@ -28,23 +28,39 @@
 #include "solver.h"
 #include "output.h"
 
-
 /* ab <- a' * b */
 void vectorDot(const floatType* restrict a, const floatType* restrict b, const int n, floatType* restrict ab){
 	int i;
-	floatType temp;
-	temp = 0;
-	#pragma omp parallel for simd aligned(a:CG_ALIGN,b:CG_ALIGN) reduction(+:temp) schedule(static) private(i) shared(n) default(none)
+	floatType temp = 0;
+       	__assume_aligned(a, CG_ALIGN);
+        __assume_aligned(b, CG_ALIGN);
+
+	#pragma omp parallel for simd reduction(+:temp) schedule(static) private(i) shared(n,a,b) default(none)
 	for(i=0; i<n; i++){
 		temp += a[i]*b[i];
 	}
 	*ab = temp;
 }
 
+/* aa <- <a,a>*/
+void vectorSquare(const floatType* restrict a, const int n, floatType* restrict aa){
+	int i;
+	floatType temp = 0;
+       	__assume_aligned(a, CG_ALIGN);
+
+	#pragma omp parallel for simd reduction(+:temp) schedule(static) private(i) shared(n,a) default(none)
+	for(i=0; i<n; i++){
+		temp += a[i]*a[i];
+	}
+	*aa = temp;
+}
+
 /* y <- ax + y */
 void axpy(const floatType a, const floatType* restrict x, const int n, floatType* restrict y){
 	int i;
-	#pragma omp parallel for simd aligned(x:CG_ALIGN,y:CG_ALIGN) default(none) private(i) shared(a,n) schedule(static) 
+	__assume_aligned(x, CG_ALIGN);
+	__assume_aligned(y, CG_ALIGN);
+	#pragma omp parallel for simd default(none) private(i) shared(a,n,x,y) schedule(static) 
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
 	}
@@ -53,7 +69,9 @@ void axpy(const floatType a, const floatType* restrict x, const int n, floatType
 /* y <- x + ay */
 void xpay(const floatType* restrict x, const floatType a, const int n, floatType* restrict y){
 	int i;
-	#pragma omp parallel for simd aligned(x:CG_ALIGN,y:CG_ALIGN) default(none) private(i) shared(n,a) schedule(static) 
+        __assume_aligned(x, CG_ALIGN);
+        __assume_aligned(y, CG_ALIGN);
+	#pragma omp parallel for simd default(none) private(i) shared(n,a,x,y) schedule(static) 
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
 	}
@@ -63,12 +81,16 @@ void xpay(const floatType* restrict x, const floatType a, const int n, floatType
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, const floatType* restrict x, floatType* restrict y){
 	int row, col, idx;
-	floatType sum;
+        __assume_aligned(data, CG_ALIGN);
+        __assume_aligned(indices, CG_ALIGN);
+        __assume_aligned(length, CG_ALIGN);
+        __assume_aligned(x, CG_ALIGN);
+        __assume_aligned(y, CG_ALIGN);
 
-	#pragma omp parallel for default(none) private(row, col, idx, sum) shared(n, x, y, data, indices, length) schedule(static) 
+	#pragma omp parallel for default(none) private(row, col, idx) shared(n, x, y, data, indices, length) schedule(static) 
 	for (row = 0; row < n; row++) {
-		sum = 0;
-		#pragma omp simd aligned(length:CG_ALIGN, data:CG_ALIGN, x: CG_ALIGN, indices:CG_ALIGN)  private(col, idx) 
+		floatType sum = 0;
+		#pragma omp simd  private(col, idx) reduction(+:sum)
 		for (col = 0; col < length[row]; col++) {
 			idx = col + row*maxNNZ;
 			sum += data[idx] * x[indices[idx]];
@@ -80,10 +102,10 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 /* nrm <- ||x||_2 */
 void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 	int i;
-	floatType temp;
-	temp = 0;
+	floatType temp = 0;
+       	__assume_aligned(x, CG_ALIGN);
 
-	#pragma omp parallel for simd aligned(x:CG_ALIGN) reduction(+:temp) default(none) private(i) shared(n) schedule(static) 
+	#pragma omp parallel for simd reduction(+:temp) default(none) private(i) shared(n,x) schedule(static) 
 	for(i = 0; i<n; i++){
 		temp+=(x[i]*x[i]);
 	}
@@ -92,14 +114,24 @@ void nrm2(const floatType* restrict x, const int n, floatType* restrict nrm){
 
 void diagMult(const floatType* restrict diag, const floatType* restrict x, const int n, floatType* restrict out) {
 	int i;
-	#pragma omp parallel for simd default(none) aligned(out:CG_ALIGN, x:CG_ALIGN, diag:CG_ALIGN) private(i) shared(n) schedule(static) 
+       	__assume_aligned(x, CG_ALIGN);
+        __assume_aligned(diag, CG_ALIGN);
+        __assume_aligned(out, CG_ALIGN);
+
+	#pragma omp parallel for simd default(none) private(i) shared(n,out,x,diag) schedule(static) 
 	for (i = 0; i < n; i++) {
-		out[i] = x[i]*diag[i];
+		floatType temp = diag[i] * x[i];
+		out[i] = temp;
 	}
 }
 
 void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict data, const int* restrict indices, const int* restrict length, floatType* restrict diag) {
 	int i, j;
+        __assume_aligned(diag, CG_ALIGN);
+        __assume_aligned(data, CG_ALIGN);
+        __assume_aligned(indices, CG_ALIGN);
+        __assume_aligned(length, CG_ALIGN);
+
 	#pragma omp parallel for default(none) schedule(static) private(i,j) shared(n,diag,data,indices,length)
 	for (i = 0; i < n; i++) {
 		for (j = 0; j < length[i]; j++) {
@@ -109,6 +141,17 @@ void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* rest
 				diag[i] = 1.0/data[idx];
 			}
 		}
+	}
+}
+
+void parallelMemcpy(const floatType* restrict x, const int n, floatType* restrict y) {
+	int i;
+       	__assume_aligned(x, CG_ALIGN);
+        __assume_aligned(y, CG_ALIGN);
+
+	#pragma omp parallel for simd default(none) schedule(static) private(i) shared(n,x,y)
+	for (i=0; i < n; i++) {
+		y[i] = x[i];
 	}
 }
 
@@ -134,11 +177,10 @@ void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* rest
    beta      = rho(k+1) / rho(k)
    p(k+1)    = r(k+1) + beta*p(k)      
 ***************************************/
-#pragma optimization_level 0 // bug with optimizations here, idk why
 void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* b, floatType* x, struct SolverConfig* sc){
 	floatType* r, *p, *q, *diag, *z;
-	floatType alpha, beta, rho, rho_old, check, dot_pq, bnrm2, rz;
-	int iter, i, j;
+	floatType alpha, beta, rho, rho_old, check, dot_pq, bnrm2;
+	int iter;
  	double timeMatvec_s;
  	double timeMatvec=0;
 
@@ -170,21 +212,16 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	/* Calculate initial residuum */
 	nrm2(r, n, &bnrm2);
 	bnrm2 = 1.0/bnrm2;
-
-	/* p(0)    = z(0) */
-	#pragma omp parallel for simd default(none) schedule(static) private(i) shared(n,p,z) 
-	for (i=0; i < n; i++) {
-		p[i] = z[i];
-	}
-
-	DBGVEC("p = r = ", p, n);
+	
+	parallelMemcpy(z, n, p);
+	DBGVEC("p = z = ", p, n);
 
 	/* rho(0)    =  <r(0),z(0)>, check(0) = <r(0),r(0)> */
 	vectorDot(r, z, n, &rho);
-	vectorDot(r, r, n, &check);
+	vectorSquare(r, n, &check);
 	printf("rho_0=%e/%e\n", rho, check);
-
-	for(iter = 0; iter < sc->maxIter; iter++){
+	int maxIter = sc->maxIter;
+	for(iter = 0; iter < maxIter; iter++){
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
 		/* q(k)      = A * p(k) */
@@ -210,9 +247,17 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		DBGVEC("r = r - alpha * q= ", r, n);
 
 		/* z(k+1) = M^-1r(k+1) */
-		diagMult(diag, r, n, z);
 
-		vectorDot(r, r, n, &check);
+		// TODO: maybe combine diagMult and vectorDot?
+		diagMult(diag, r, n, z);
+		
+		rho_old = rho;
+		DBGSCA("rho_old = rho = ", rho_old);
+
+		vectorDot(r, z, n,  &rho);
+
+		vectorSquare(r, n, &check);
+
 		/* Normalize the residual with initial one */
 		sc->residual = sqrt(check) * bnrm2;
 
@@ -225,13 +270,6 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		printf("res_%d=%e\n", iter+1, sc->residual);
 		if(sc->residual <= sc->tolerance)
 			break;
-
-		rho_old = rho;
-		DBGSCA("rho_old = rho = ", rho_old);
-
-		/* rho(k+1)  = <r(k+1), z(k+1)> */
-		vectorDot(r, z, n, &rho);
-		DBGSCA("rho = <r, z> = ", rho);
 
 		/* beta      = rho(k+1) / rho(k) */
 		beta = rho / rho_old;

@@ -33,7 +33,7 @@
 
 /* Parse the matrix market file "filename" and return
  * the matrix in ELLPACK-R format in A. */
-void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** restrict data, int** restrict indices, int** restrict length){
+void parseMM(const char *filename, int* n, int* nnz, int* maxNNZ, floatType** restrict data, int** restrict indices, int** restrict length){
 	int M,N;
 	int i,j;
 	int *I, *J, *offset;
@@ -109,7 +109,7 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** restrict
 
 	/* Initialize the length pointer of the matrix */
 	// ensure data locality
-	#pragma omp parallel for private(i) firstprivate(N, length) schedule(static) default(none)
+	#pragma omp parallel for private(i) shared(N, length) schedule(static) default(none)
 	for (i = 0; i < N; i++) {
 		(*length)[i] = 0;
 	}
