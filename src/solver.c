@@ -81,16 +81,17 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 	__assume_aligned(y, CG_ALIGN);
 	#pragma omp parallel for default(none) private(row) schedule(static) shared(x,y,data,indices,length,maxNNZ)
 	for (row = 0; row < n; row++) {
-		floatType sum = 0;
 		int col;
+		int off = row*maxNNZ;
 		__assume(length[row] % 2 == 0);
-		__assume(row*maxNNZ % 2 == 0);
-		
+		__assume(off % 2 == 0);
+		y[row] = 0;
+
+		#pragma loop_count min(2),  max(6), avg(4)
 		for (col = 0; col < length[row]; col++) {
-			int idx = col + row*maxNNZ;
-			sum += data[idx] * x[indices[idx]];
+			int idx = col + off;
+			y[row] += data[idx] * x[indices[idx]];
 		}
-		y[row] = sum;
 	}
 }
 

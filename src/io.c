@@ -178,6 +178,11 @@ void parseMM(const char *filename, int* n, int* nnz, int* maxNNZ, floatType** re
 		}
 	}
 
+	// ensure alignment to 16 bytes
+	if (*maxNNZ % 2 != 0) {
+		*maxNNZ = (*maxNNZ/2 + 1)*2;
+	}
+
 	/* Allocate the rest of the memory for the ELLPACK-R matrix */
 	*data = (floatType*) _mm_malloc(sizeof(floatType) * N * (*maxNNZ), CG_ALIGN);
 	*indices = (int*) _mm_malloc(sizeof(int) * N * (*maxNNZ), CG_ALIGN);
