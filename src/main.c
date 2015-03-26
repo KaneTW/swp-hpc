@@ -186,7 +186,7 @@ int main(int argc, char *argv[]){
 		totalLength += length[i];
 	}
 	
-	flops = (totalLength*4 + 9*n + 4*sc.iter*(totalLength*4 + 15*n))/solveTime;
+	flops = 16*(sc.iter+1)*totalLength/sc.timeMatvec;
 	flops /= 1000000000; // gflops (was mflops)
 
 	/* Print solution vector x or the first 10 values of the result. 
