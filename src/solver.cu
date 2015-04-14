@@ -31,7 +31,7 @@
 
 /* ab <- a' * b */
 template<unsigned int blockSize> 
- __global__ inline void unrolledReduction(const int tid, floatType* sdata) {
+ __device__ void unrolledReduction(const int tid, floatType* sdata) {
  	#define UNROLLED_ADD_SYNC(n) { \
 		if (blockSize >= n) { \
 			if (tid < n/2) { \
@@ -47,7 +47,7 @@ template<unsigned int blockSize>
 
 	#define UNROLLED_ADD(n) { \
 		if (blockSize >= n) { \
-			sdata[tid] += sdata[tid + n/2];
+			sdata[tid] += sdata[tid + n/2]; \
 		} \
 	}
 
@@ -70,10 +70,14 @@ __global__ void devVectorDot(const floatType* __restrict__ a, const floatType* _
 	int gridSize = blockSize*2 * gridDim.x;
 	sdata[tid] = 0;
 
+	floatType localSum;
 	while (i < n) {
-		sdata[tid] += a[i]*b[i] + a[i + blockSize]*b[i+blockSize];
+		localSum = a[i]*b[i];
+		if (i + blockSize < n)
+	            localSum += a[i+blockSize]*b[i+blockSize];
 		i += gridSize;
 	}
+	sdata[tid] = localSum;
 	__syncthreads();
 
 	unrolledReduction<blockSize>(tid, sdata);
@@ -92,10 +96,14 @@ __global__ void devVectorSquare(const floatType* __restrict__ x, const int n, fl
 	int gridSize = blockSize*2 * gridDim.x;
 	sdata[tid] = 0;
 
+	floatType localSum;
 	while (i < n) {
-		sdata[tid] += x[i]*x[i] + x[i + blockSize]*x[i+blockSize];
+		localSum = x[i]*x[i];
+		if (i + blockSize < n)
+	            localSum += x[i+blockSize]*x[i+blockSize];
 		i += gridSize;
 	}
+	sdata[tid] = localSum;
 	__syncthreads();
 
 	unrolledReduction<blockSize>(tid, sdata);
@@ -108,7 +116,7 @@ __global__ void devVectorSquare(const floatType* __restrict__ x, const int n, fl
 /* y <- ax + y */
 __global__ void axpy(const floatType a, const floatType* __restrict__ x, const int n, floatType* __restrict__ y){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i < n) 
+	if (i < n) {
 		y[i]=a*x[i]+y[i];
 	}
 }
@@ -126,10 +134,10 @@ __global__ void xpay(const floatType* __restrict__ x, const floatType a, const i
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 __global__ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* __restrict__ data, const int* __restrict__ indices, const int* __restrict__ length, const floatType* __restrict__ x, floatType* __restrict__ y){
 	int row = blockIdx.x * blockDim.x + threadIdx.x;
-
+	int col;
 	if (row < n) {
 		float temp = 0;
-		for (col = 0; col < maxNNZ; j++) {
+		for (col = 0; col < maxNNZ; col++) {
 			int k = col * n + row;
 			temp += data[k] * x[indices[k]];
 		}
@@ -147,7 +155,7 @@ void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __res
 	
 	cudaMalloc(&devOut, size);
 
-	devVectorSquare<threadsPerBlock><<<numBlocks, threadsPerBlock>>>(x, n, devOut);
+	devVectorSquare<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(x, n, devOut);
 
 	cudaMemcpy(out, devOut, size, cudaMemcpyDeviceToHost);
 	cudaFree(devOut);
@@ -155,6 +163,7 @@ void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __res
 	for (int i = 0; i < threadsPerBlock; i++) {
 		temp += out[i];
 	}
+	free(out);
 	*a = temp;
 }
 
@@ -168,7 +177,7 @@ void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b,
 	
 	cudaMalloc(&devOut, size);
 
-	devVectorDot<threadsPerBlock><<<numBlocks, threadsPerBlock>>>(a, b, n, devOut);
+	devVectorDot<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(a, b, n, devOut);
 
 	cudaMemcpy(out, devOut, size, cudaMemcpyDeviceToHost);
 	cudaFree(devOut);
@@ -176,6 +185,7 @@ void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b,
 	for (int i = 0; i < threadsPerBlock; i++) {
 		temp += out[i];
 	}
+	free(out);
 	*ab = temp;
 }
 
@@ -208,7 +218,7 @@ void nrm2(const floatType* __restrict__ x, const int n, floatType* __restrict__ 
    p(k+1)    = r(k+1) + beta*p(k)      
 ***************************************/
 void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restrict__ data, const int* __restrict__ indices, const int* __restrict__ length, const floatType* __restrict__ b, floatType* __restrict__ x, struct SolverConfig* sc){
-	floatType *r, *p, *q, *devR, *devP, *devQ;
+	floatType *devR, *devP, *devQ;
 	floatType alpha, beta, rho, rho_old, dot_pq, bnrm2;
 	int iter;
  	double timeMatvec_s;
@@ -220,18 +230,17 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	const size_t matCount = n * maxNNZ;
 	const size_t fmatSize = matCount * sizeof(floatType);
 	const size_t imatSize = matCount * sizeof(int);
-	r = (floatType*)malloc(fvecSize);
+
 	cudaMalloc(&devR, fvecSize);
-	p = (floatType*)malloc(fvecSize);
 	cudaMalloc(&devP, fvecSize);
-	q = (floatType*)malloc(fvecSize);
 	cudaMalloc(&devQ, fvecSize);
 	// cuda memory for arguments
 	// constant memory
-	cudaChannelFormatDesc iChan = cudaCreateChannelDesc<int>();
-	cudaChannelFormatDesc fChan = cudaCreateChannelDesc<floatType>();
+	//cudaChannelFormatDesc iChan = cudaCreateChannelDesc<int>();
+	//cudaChannelFormatDesc fChan = cudaCreateChannelDesc<floatType>();
+
 	floatType *devData, *devB;
-	floatType *devIndices, *devLength;
+	int *devIndices, *devLength;
 	cudaMalloc(&devB, fvecSize);
 	cudaMemcpy(devB, b, fvecSize, cudaMemcpyHostToDevice);
 
@@ -264,7 +273,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	bnrm2 = 1.0 /bnrm2;
 
 	/* p(0)    = r(0) */
-	cudaMemcpy(devP, devR, fvecSize);
+	cudaMemcpy(devP, devR, fvecSize, cudaMemcpyDeviceToDevice);
 
 	/* rho(0)    =  <r(0),r(0)> */
 	vectorSquare(devR, n, &rho);
@@ -294,7 +303,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		rho_old = rho;
 
 		/* rho(k+1)  = <r(k+1), r(k+1)> */
-		vectorDot(devR, devR, n, &rho);
+		vectorSquare(devR, n, &rho);
 
 		/* Normalize the residual with initial one */
 		sc->residual= sqrt(rho) * bnrm2;
@@ -328,7 +337,19 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	sc->timeMatvec = timeMatvec;
 
 	/* Clean up */
-	free(r);
-	free(p);
-	free(q);
+	cudaFree(devR);
+	cudaFree(devP);
+	cudaFree(devQ);
+	cudaFree(devB);
+	cudaFree(devX);
+	cudaFree(devIndices);
+	cudaFree(devData);
+	cudaFree(devLength);
+
+	  cudaError_t error = cudaGetLastError();
+  if(error != cudaSuccess)
+  {
+    // print the CUDA error message and exit
+    printf("CUDA error: %s\n", cudaGetErrorString(error));
+  }
 }

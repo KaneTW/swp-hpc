@@ -1,17 +1,17 @@
 
 MAT_DIR = /home/lect0005/matrix
 OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o 
-SRC = $(OBJ:%.o=%.c)
+SRC = $(OBJ:%.o=%.c?)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = ${FLAGS_FAST} -g
+C_FLAGS = ${FLAGS_FAST} -g 
 LINKER = ${CC}
 
 ifeq ($(dbg),1)
 C_FLAGS = ${FLAGS_DEBUG} -DDEBUG
 endif
 
-default: cg.exe
+default: cuda
 
 openmp: C_FLAGS += ${FLAGS_OPENMP}
 openmp: cg.exe
@@ -26,16 +26,17 @@ openacc: cg.exe
 cuda: CC = gcc
 cuda: CUDA_CC = nvcc
 cuda: LINKER = ${CUDA_CC}
+cuda: C_FLAGS += -D__global__=
 ifeq ($(dbg),1)
 cuda: CUDA_FLAGS = -O0 -DCUDA -DDEBUG ${FLAGS_DEBUG} -G -arch=sm_20
 else
 cuda: CUDA_FLAGS = -O3 -DCUDA -arch=sm_20
-cuda: C_FLAGS = -g
+#cuda: C_FLAGS = -g
 endif
 cuda: cg.exe
 
 cg.exe: ${OBJ}
-	${LINKER} ${C_FLAGS} -o cg.exe ${OBJ} ${LINKER_FLAGS} 
+	${LINKER} ${CUDA_FLAGS} -o cg.exe ${OBJ} ${LINKER_FLAGS} 
 
 %.o: %.c
 	${CC} ${C_FLAGS} -c $<
@@ -47,13 +48,13 @@ cg.exe: ${OBJ}
 # For correctness you always should run all iterations to check convergence.
 # For basic performance analysis it might be enough to run less iterations
 # and compare the GFLOPS of the matrix vector product.
-run: cg.exe
+run: cuda
 	CG_MAX_ITER=6000 OMP_NUM_THREADS=1 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
 
-run_serena: cg.exe
+run_serena: cuda
 	CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/Serena.mtx
 
-run_debug: cg.exe
+run_debug: cuda
 	CG_MAX_ITER=1 OMP_NUM_THREADS=1 OMP_PLACES=cores ./cg.exe debug.mtx
 
 clean:

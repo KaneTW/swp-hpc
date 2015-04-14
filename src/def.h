@@ -16,6 +16,10 @@
 #ifndef __DEF_H__
 #define __DEF_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif 
+
 /* Define some ugly macros to wrap printf(). You can use
  * them to print out some debug stuff which do not want to
  * see in the productive runs. Deactivate by removing
@@ -58,5 +62,9 @@ struct SolverConfig {
 extern void init(void);
 extern double getWTime(void);
 void gpuWarmup();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
