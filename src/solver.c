@@ -29,18 +29,62 @@
 
 
 /* ab <- a' * b */
-void vectorDot(const floatType* a, const floatType* b, const int n, floatType* ab){
-	int i;
-	floatType temp;
-	temp=0;
-	for(i=0; i<n; i++){
-		temp += a[i]*b[i];
+
+template<unsigned int blockSize> 
+ __global__ inline void unrolledReduction(const int tid, floatType* sdata) {
+ 	#define UNROLLED_ADD_SYNC(n) { \
+		if (blockSize >= n) { \
+			if (tid < n/2) { \
+				sdata[tid] += sdata[tid + n/2]; \
+			} __syncthreads(); \
+		} \
 	}
-	*ab = temp;
+
+	UNROLLED_ADD_SYNC(512)
+	UNROLLED_ADD_SYNC(256)
+	UNROLLED_ADD_SYNC(128)
+	#undef UNROLLED_ADD_SYNC
+
+	#define UNROLLED_ADD(n) { \
+		if (blockSize >= n) { \
+			sdata[tid] += sdata[tid + n/2];
+		} \
+	}
+
+	if (tid < 32) {
+		UNROLLED_ADD(64)
+		UNROLLED_ADD(32)
+		UNROLLED_ADD(16)
+		UNROLLED_ADD(8)
+		UNROLLED_ADD(4)
+		UNROLLED_ADD(2)
+	}
+	#undef UNROLLED_ADD
+ }
+
+ template<unsigned int blockSize>
+__global__ void devVectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b, const int n, floatType* __restrict__ ab){
+	extern __shared__ floatType sdata[];
+	int tid = threadIdx.x;
+	int i = blockIdx.x * (blockSize*2) + tid;
+	int gridSize = blockSize*2 * gridDim.x;
+	sdata[tid] = 0;
+
+	while (i < n) {
+		sdata[tid] += a[i]*b[i] + a[i + blockSize]*b[i+blockSize];
+		i += gridSize;
+	}
+	__syncthreads();
+
+	unrolledReduction<blockSize>(tid, sdata);
+	
+	if (tid == 0) {
+		ab[blockIdx.x] = sdata[0];
+	}
 }
 
 /* y <- ax + y */
-void axpy(const floatType a, const floatType* x, const int n, floatType* y){
+void axpy(const floatType a, const floatType* __restrict__ x, const int n, floatType* __restrict__ y){
 	int i;
 	for(i=0; i<n; i++){
 		y[i]=a*x[i]+y[i];
@@ -48,7 +92,7 @@ void axpy(const floatType a, const floatType* x, const int n, floatType* y){
 }
 
 /* y <- x + ay */
-void xpay(const floatType* x, const floatType a, const int n, floatType* y){
+void xpay(const floatType* __restrict__ x, const floatType a, const int n, floatType* __restrict__ y){
 	int i;
 	for(i=0; i<n; i++){
 		y[i]=x[i]+a*y[i];
@@ -57,7 +101,7 @@ void xpay(const floatType* x, const floatType a, const int n, floatType* y){
 
 /* y <- A*x
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
-void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data, const int* indices, const int* length, const floatType* x, floatType* y){
+void matvec(const int n, const int nnz, const int maxNNZ, const floatType* __restrict__ data, const int* __restrict__ indices, const int* __restrict__ length, const floatType* __restrict__ x, floatType* __restrict__ y){
 	int i, j, k;
 	for (i = 0; i < n; i++) {
 		y[i] = 0;
@@ -68,15 +112,26 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* data,
 	}
 }
 
-/* nrm <- ||x||_2 */
-void nrm2(const floatType* x, const int n, floatType* nrm){
-	int i;
-	floatType temp;
-	temp = 0;
-	for(i = 0; i<n; i++){
-		temp+=(x[i]*x[i]);
+/* a <- <x,x> */
+template<unsigned int blockSize>
+__global__ void devVectorSquare(const floatType* __restrict__ x, const int n, floatType* __restrict__ a){
+	extern __shared__ floatType sdata[];
+	int tid = threadIdx.x;
+	int i = blockIdx.x * (blockSize*2) + tid;
+	int gridSize = blockSize*2 * gridDim.x;
+	sdata[tid] = 0;
+
+	while (i < n) {
+		sdata[tid] += x[i]*x[i] + x[i + blockSize]*x[i+blockSize];
+		i += gridSize;
 	}
-	*nrm=sqrt(temp);
+	__syncthreads();
+
+	unrolledReduction<blockSize>(tid, sdata);
+	
+	if (tid == 0) {
+		a[blockIdx.x] = sdata[0];
+	}
 }
 
 
