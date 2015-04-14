@@ -183,25 +183,22 @@ int main(int argc, char *argv[]){
 	cg(n, nnz, maxNNZ, data, indices, length, b, x, &sc);
 	solveTime = getWTime()-solveTime;
 
-	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
-	/* update: add (2n)+iter*(2n)*/
-	totalLength = 0;
-	for (i = 0; i < n; i++) {
-		totalLength += length[i];
-	}
-
 	minNNZ = maxNNZ;
 	avgNNZ = 0.0;
+	totalLength = 0;
+
 	for (i = 0; i < n; i++) {
 		if(length[i] < minNNZ) {
 			minNNZ = length[i];
 		}
 		avgNNZ += length[i];
+		totalLength += length[i];
 	}
 
 	avgNNZ /= n;
-	
-	flops = 16*(sc.iter+1)*totalLength/sc.timeMatvec;
+
+
+	flops = 3*(sc.iter+1)*totalLength/sc.timeMatvec;
 	flops /= 1000000000; // gflops
 
 	/* Print solution vector x or the first 10 values of the result. 

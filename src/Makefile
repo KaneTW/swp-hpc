@@ -4,7 +4,7 @@ OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = -static -opt-prefetch -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -axCORE-AVX2,AVX,SSE4.2,SSE4.1 -fp-model fast=2 -restrict -Wall -opt-subscript-in-range -debug full
+C_FLAGS = -qopenmp-simd  -qopt-report 5 -qopt-report-phase=vec -opt-prefetch -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -xHost -fp-model fast=2 -restrict -Wall -opt-subscript-in-range -g
 
 LINKER = ${CC}
 
@@ -53,7 +53,7 @@ cg.exe: ${OBJ}
 # For basic performance analysis it might be enough to run less iterations
 # and compare the GFLOPS of the matrix vector product.
 run: openmp
-	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
+	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=1000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
 
 run_serena: openmp
 	OMP_PLACES=cores OMP_PROC_BIND=spread CG_MAX_ITER=6000 OMP_NUM_THREADS=32 ./cg.exe $(MAT_DIR)/Serena.mtx

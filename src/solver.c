@@ -1,3 +1,4 @@
+
 /*****************************************************
  * CG Solver (HPC Software Lab)
  *
@@ -86,8 +87,7 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 		__assume(length[row] % 2 == 0);
 		__assume(off % 2 == 0);
 		y[row] = 0;
-
-		#pragma loop_count min(2),  max(6), avg(4)
+		#pragma omp simd aligned(data,indices,length,x,y) linear(col) simdlen(4)
 		for (col = 0; col < length[row]; col++) {
 			int idx = col + off;
 			y[row] += data[idx] * x[indices[idx]];
