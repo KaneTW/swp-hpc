@@ -164,7 +164,7 @@ __global__ void matvec(const int n, const int nnz, const int maxNNZ, const float
 void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __restrict__ a) {
 	const int threadsPerBlock = BLOCK_SIZE;
 	const int numBlocks = n/threadsPerBlock + 1;
-	const size_t size = threadsPerBlock*sizeof(floatType);
+	const size_t size = numBlocks*sizeof(floatType);
 	static floatType* devOut = NULL;
 	if (devOut == NULL) {
 		CHECK_CUDA_ERROR(cudaMallocHost(&devOut, size));
@@ -174,8 +174,8 @@ void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __res
 	
 	devVectorSquare<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(x, n, devOut);
 	printError();
-
-	for (int i = 0; i < threadsPerBlock; i++) {
+	CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+	for (int i = 0; i < numBlocks; i++) {
 		temp += devOut[i];
 	}
 
@@ -187,7 +187,7 @@ void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __res
 void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b, const int n, floatType* __restrict__ ab) {
 	const int threadsPerBlock = BLOCK_SIZE;
 	const int numBlocks = n/threadsPerBlock + 1;
-	const size_t size = threadsPerBlock*sizeof(floatType);
+	const size_t size = numBlocks*sizeof(floatType);
 	static floatType* devOut = NULL;
 	floatType temp = 0;
 	if (devOut == NULL) {
@@ -196,8 +196,9 @@ void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b,
 
 	devVectorDot<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(a, b, n, devOut);
 	printError();
-
-	for (int i = 0; i < threadsPerBlock; i++) {
+	CHECK_CUDA_ERROR(cudaDeviceSynchronize());
+	
+	for (int i = 0; i < numBlocks; i++) {
 		temp += devOut[i];
 	}
 
