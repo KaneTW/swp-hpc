@@ -421,9 +421,12 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		 * environment variable our solution vector
 		 * is good enough and we can stop the 
 		 * algorithm. */
+		#ifdef RESIDUAL_DEBUG
 		printf("res_%d=%e\n", iter+1, sc->residual);
-		printf("rho_%d=%e\n", iter+1, rho);
+		printf("rhores_%d=%e\n", iter+1, sqrt(rho)*bnrm2);
+		printf("rhores_%d=%e\n", iter+1, rho);
 		printf("check_%d=%e\n", iter+1, check);
+		#endif
 		if(sc->residual <= sc->tolerance)
 			break;
 
@@ -437,6 +440,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 
 	}
 	cudaDeviceSynchronize();
+	printf("res_%d=%e\n", iter+1, sc->residual);
 	// copy x back
 	CHECK_CUDA_ERROR(cudaMemcpy(x, devX, fvecSize, cudaMemcpyDeviceToHost ));
 
