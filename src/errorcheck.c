@@ -21,6 +21,7 @@
 /* Check if the normalized residual (which is a ration of the final and the inital residual)
  * is smaller than the specified CG tolerance. 0 is returned in case of errors, 1 otherwise. */
 int check_error(const floatType bnrm2, const floatType residual, const floatType cg_tol){
+	printf("residual = %e, bnrm2 = %e => check = %e\n", residual, bnrm2, residual/bnrm2);
 	return ((residual / bnrm2) <= cg_tol) ? 1 : 0;
 }
 

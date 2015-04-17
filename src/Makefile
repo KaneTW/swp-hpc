@@ -55,7 +55,7 @@ run_serena: cuda
 	CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/Serena.mtx
 
 run_debug: cuda
-	CG_MAX_ITER=1 OMP_NUM_THREADS=1 OMP_PLACES=cores ./cg.exe debug.mtx
+	CG_MAX_ITER=1 OMP_NUM_THREADS=1 OMP_PLACES=cores ./cg.exe debug_symm.mtx
 
 clean:
 	rm -f cg.exe

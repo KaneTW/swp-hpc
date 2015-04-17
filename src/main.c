@@ -53,7 +53,6 @@ int main(int argc, char *argv[]){
 	floatType *b, *x;
 	floatType residual, bnrm2;
 	int correct;
-	unsigned long long totalLength; // int's too small
 	double flops;
 	double ioTime, solveTime, totalTime;
 
@@ -177,12 +176,11 @@ int main(int argc, char *argv[]){
 	solveTime = getWTime();
 	cg(n, nnz, maxNNZ, data, indices, length, b, x, &sc);
 	solveTime = getWTime()-solveTime;
+	cudaDeviceReset();
 	
 	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
 
-	int i;
-	
-	flops = 3*(sc.iter+1)*nnz/sc.timeMatvec;
+	flops = 3*(sc.iter+1)*(nnz/sc.timeMatvec);
 	flops /= 1000000000; // gflops (was mflops)
 
 	/* Print solution vector x or the first 10 values of the result. 
@@ -205,6 +203,7 @@ int main(int argc, char *argv[]){
 		exit(1);
 	}
 
+	int i;
 	for (i = 0; i < n; i++) {
 		fprintf(fp, "%e\n", x[i]);
 	}

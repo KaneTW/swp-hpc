@@ -44,27 +44,48 @@ void printError() {
 #endif
 }
 
-/* ab <- a' * b */
-template<unsigned int blockSize> 
- __device__ void unrolledReduction(const int tid, floatType* sdata) {
- 	#define UNROLLED_ADD_SYNC(n) { \
-		if (blockSize >= n) { \
-			if (tid < n/2) { \
-				sdata[tid] += sdata[tid + n/2]; \
-			} __syncthreads(); \
+#define UNROLLED_ADD_SYNC(n) { \
+if (blockSize >= n) { \
+	if (tid < n/2) { \
+		sdata[tid] = localSum = localSum + sdata[tid + n/2]; \
 		} \
-	}
+	__syncthreads(); \
+	} \
+}
 
+#define UNROLLED_ADD(n) { \
+	if (blockSize >= n) { \
+		sdata[tid] = localSum = localSum + sdata[tid + n/2]; \
+	} \
+}
+
+ template<unsigned int blockSize>
+__global__ void devVectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b, const int n, floatType* __restrict__ ab){
+	extern __shared__ floatType sdata[];
+	int tid = threadIdx.x;
+	int i = blockIdx.x * (blockSize*2) + tid;
+	int gridSize = blockSize*2 * gridDim.x;
+
+	floatType localSum = 0;
+	while (i < n) {
+		localSum += a[i]*b[i];
+		#ifdef DEBUG
+		printf("vecdot: %i %f %f %f\n", i, a[i], b[i], localSum);
+		#endif
+		if (i + blockSize < n)
+	            localSum += a[i+blockSize]*b[i+blockSize];
+	    	#ifdef DEBUG
+    		printf("vecdot: %f\n",  localSum);
+    		#endif
+		i += gridSize;
+	}
+	sdata[tid] = localSum;
+	__syncthreads();
+
+	UNROLLED_ADD_SYNC(1024)
 	UNROLLED_ADD_SYNC(512)
 	UNROLLED_ADD_SYNC(256)
-	UNROLLED_ADD_SYNC(128)
-	#undef UNROLLED_ADD_SYNC
-
-	#define UNROLLED_ADD(n) { \
-		if (blockSize >= n) { \
-			sdata[tid] += sdata[tid + n/2]; \
-		} \
-	}
+	UNROLLED_ADD_SYNC(128)	
 
 	if (tid < 32) {
 		UNROLLED_ADD(64)
@@ -74,33 +95,12 @@ template<unsigned int blockSize>
 		UNROLLED_ADD(4)
 		UNROLLED_ADD(2)
 	}
-	#undef UNROLLED_ADD
- }
 
- template<unsigned int blockSize>
-__global__ void devVectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b, const int n, floatType* __restrict__ ab){
-	extern __shared__ floatType sdata[];
-	int tid = threadIdx.x;
-	int i = blockIdx.x * (blockSize*2) + tid;
-	int gridSize = blockSize*2 * gridDim.x;
-	sdata[tid] = 0;
-
-	floatType localSum = 0;
-	while (i < n) {
-		localSum += a[i]*b[i];
-		if (i + blockSize < n)
-	            localSum += a[i+blockSize]*b[i+blockSize];
-		i += gridSize;
-	}
-	sdata[tid] = localSum;
-	__syncthreads();
-
-	unrolledReduction<blockSize>(tid, sdata);
-	ab[blockIdx.x] = 1337;//debug
 	
 	if (tid == 0) {
-		ab[blockIdx.x] = sdata[0];
+		ab[blockIdx.x] = localSum;
 	}
+	__syncthreads();
 }
 
 /* a <- <x,x> */
@@ -110,7 +110,6 @@ __global__ void devVectorSquare(const floatType* __restrict__ x, const int n, fl
 	int tid = threadIdx.x;
 	int i = blockIdx.x * (blockSize*2) + tid;
 	int gridSize = blockSize*2 * gridDim.x;
-	sdata[tid] = 0;
 
 	floatType localSum = 0;
 	while (i < n) {
@@ -122,11 +121,24 @@ __global__ void devVectorSquare(const floatType* __restrict__ x, const int n, fl
 	sdata[tid] = localSum;
 	__syncthreads();
 
-	unrolledReduction<blockSize>(tid, sdata);
-	a[blockIdx.x] = 1337;//debug
-	if (tid == 0) {
-		a[blockIdx.x] = sdata[0];
+	UNROLLED_ADD_SYNC(1024)
+	UNROLLED_ADD_SYNC(512)
+	UNROLLED_ADD_SYNC(256)
+	UNROLLED_ADD_SYNC(128)
+
+	if (tid < 32) {
+		UNROLLED_ADD(64)
+		UNROLLED_ADD(32)
+		UNROLLED_ADD(16)
+		UNROLLED_ADD(8)
+		UNROLLED_ADD(4)
+		UNROLLED_ADD(2)
 	}
+
+	if (tid == 0) {
+		a[blockIdx.x] = localSum;
+	}
+	__syncthreads();
 }
 
 /* y <- ax + y */
@@ -152,56 +164,78 @@ __global__ void matvec(const int n, const int nnz, const int maxNNZ, const float
 	int row = blockIdx.x * blockDim.x + threadIdx.x;
 	int col;
 	if (row < n) {
-		float temp = 0;
-		for (col = 0; col < maxNNZ; col++) {
+		float temp = 0;	
+		for (col = 0; col < length[row]; col++) {
 			int k = col * n + row;
+			#ifdef DEBUG
+			printf("matvec temp at %i/%i = %f\n", col, k, temp);
+			printf("matvec data[%i] = %f, x[%i] = %f, indices[%i] = %i\n", k, data[k], indices[k], x[indices[k]],
+				k, indices[k]);
+			#endif
 			temp += data[k] * x[indices[k]];
 		}
+		#ifdef DEBUG
+		printf("matvec y[%i] = %f\n", row, temp);
+		#endif
 		y[row] = temp;
 	}
 }
 
-void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __restrict__ a) {
-	const int threadsPerBlock = BLOCK_SIZE;
-	const int numBlocks = n/threadsPerBlock + 1;
-	const size_t size = threadsPerBlock*sizeof(floatType);
-	static floatType* devOut = NULL;
-	if (devOut == NULL) {
-		CHECK_CUDA_ERROR(cudaMallocHost(&devOut, size));
-	}
+// optimize a bit for G3
+#define REDUCTION_BLOCK_SIZE 128
+#define REDUCTION_BLOCK_COUNT(n) 64
 
-	floatType temp = 0;
+void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __restrict__ a) {
+	const int threadsPerBlock = REDUCTION_BLOCK_SIZE;
+	const int numBlocks = REDUCTION_BLOCK_COUNT(n);
+	const size_t size = numBlocks*sizeof(floatType);
+
+	// hacky as fuck, but works
+	static floatType* out = NULL;
+	static floatType* devOut = NULL;
+
+	if (devOut == NULL) {
+		CHECK_CUDA_ERROR(cudaMalloc(&devOut, size));
+		out = (floatType*) malloc(size);
+	}
 	
 	devVectorSquare<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(x, n, devOut);
 	printError();
 
-	for (int i = 0; i < threadsPerBlock; i++) {
-		temp += devOut[i];
+	CHECK_CUDA_ERROR(cudaMemcpy(out, devOut, size, cudaMemcpyDeviceToHost));
+
+	floatType temp = 0;
+	for (int i = 0; i < numBlocks; i++) {
+		temp += out[i];
 	}
 
-	//cudaFreeHost(devOut);
 
 	*a = temp;
 }
 
 void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b, const int n, floatType* __restrict__ ab) {
-	const int threadsPerBlock = BLOCK_SIZE;
-	const int numBlocks = n/threadsPerBlock + 1;
-	const size_t size = threadsPerBlock*sizeof(floatType);
+	const int threadsPerBlock = REDUCTION_BLOCK_SIZE;
+	const int numBlocks = REDUCTION_BLOCK_COUNT(n);
+	const size_t size = numBlocks*sizeof(floatType);
+
+	// hacky as fuck, but works
+	static floatType* out = NULL;
 	static floatType* devOut = NULL;
-	floatType temp = 0;
+
 	if (devOut == NULL) {
-		CHECK_CUDA_ERROR(cudaMallocHost(&devOut, size));
+		CHECK_CUDA_ERROR(cudaMalloc(&devOut, size));
+		out = (floatType*) malloc(size);
 	}
 
 	devVectorDot<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(a, b, n, devOut);
 	printError();
 
-	for (int i = 0; i < threadsPerBlock; i++) {
-		temp += devOut[i];
-	}
+	CHECK_CUDA_ERROR(cudaMemcpy(out, devOut, size, cudaMemcpyDeviceToHost));
 
-	//cudaFreeHost(devOut);
+	floatType temp = 0;
+	for (int i = 0; i < numBlocks; i++) {
+		temp += out[i];
+	}
 
 	*ab = temp;
 }
@@ -216,7 +250,10 @@ __global__ void diagMult(const floatType* __restrict__ diag, const floatType* __
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (i < n) {
-		out[i] = diag[i] * x[i];
+		out[i] = x[i]/diag[i];
+		#ifdef DEBUG
+		printf("diagMult: diag[%i] = %f, x[%i] = %f, out[%i] = %f\n", i, diag[i], i, x[i], i, out[i]);
+		#endif
 	}
 }
 
@@ -225,10 +262,13 @@ __global__ void getDiag(const int n, const int nnz, const int maxNNZ, const floa
 	if (i < n) {
 		int j;
 		for (j = 0; j < length[i]; j++) {
-			int idx = j+i*maxNNZ;
+			int idx = j*n + i;
 			int realcol = indices[idx];
 			if (i == realcol) {
-				diag[i] = 1.0/data[idx];
+				diag[i] = data[idx];
+				#ifdef DEBUG
+				printf("getDiag: diag[%i] = %f\n", i, diag[i]);
+				#endif
 			}
 		}
 	}
@@ -260,8 +300,12 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	floatType *devR, *devP, *devQ;
 	floatType alpha, beta, rho, rho_old, dot_pq, bnrm2, check;
 	int iter;
- 	double timeMatvec_s;
- 	double timeMatvec=0;
+ 	float timeMatvec_s;
+ 	float timeMatvec=0;
+
+ 	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
 	
 	/* allocate memory */
 	const size_t fvecSize = n * sizeof(floatType);
@@ -301,13 +345,17 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	CHECK_CUDA_ERROR(cudaMalloc(&devZ, fvecSize));
 
 	CHECK_CUDA_ERROR(cudaMalloc(&devX, fvecSize));
+	CHECK_CUDA_ERROR(cudaMemcpy(devX, x, fvecSize, cudaMemcpyHostToDevice));
 	
 	/* r(0)    = b - Ax(0) */
-	timeMatvec_s = getWTime();
+	cudaEventRecord(start);
 	matvec<<<numBlocks, threadsPerBlock>>>(n, nnz, maxNNZ, devData, devIndices, devLength, devX, devR);
 	printError();
+	cudaEventRecord(stop);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&timeMatvec_s, start, stop);
+	timeMatvec += timeMatvec_s/1000;
 
-	timeMatvec += getWTime() - timeMatvec_s;
 	xpay<<<numBlocks, threadsPerBlock>>>(devB, -1.0, n, devR);
 	printError();
 
@@ -326,16 +374,19 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	/* check(0)    =  <r(0),r(0)> */
 	/* rho(0)    =  <r(0),z(0)> */
 	vectorSquare(devR, n, &check);
-	printf("rho_0=%e\n", rho);
+	printf("rho_0=%e/%e\n", rho, check);
 
 	for(iter = 0; iter < sc->maxIter; iter++){
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
 		/* q(k)      = A * p(k) */
-		timeMatvec_s = getWTime();
+		cudaEventRecord(start);
 		matvec<<<numBlocks, threadsPerBlock>>>(n, nnz, maxNNZ, devData, devIndices, devLength, devP, devQ);
-		printError();
-		timeMatvec += getWTime() - timeMatvec_s;
+		printError();	
+		cudaEventRecord(stop);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&timeMatvec_s, start, stop);
+		timeMatvec += timeMatvec_s/1000;
 
 		/* dot_pq    = <p(k),q(k)> */
 		vectorDot(devP, devQ, n, &dot_pq);
@@ -371,6 +422,8 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		 * is good enough and we can stop the 
 		 * algorithm. */
 		printf("res_%d=%e\n", iter+1, sc->residual);
+		printf("rho_%d=%e\n", iter+1, rho);
+		printf("check_%d=%e\n", iter+1, check);
 		if(sc->residual <= sc->tolerance)
 			break;
 
@@ -383,7 +436,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		printError();
 
 	}
-
+	cudaDeviceSynchronize();
 	// copy x back
 	CHECK_CUDA_ERROR(cudaMemcpy(x, devX, fvecSize, cudaMemcpyDeviceToHost ));
 
