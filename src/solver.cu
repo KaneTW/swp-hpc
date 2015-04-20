@@ -27,7 +27,7 @@
 #include "solver.h"
 #include "output.h"
 
-#define BLOCK_SIZE 1024
+#define BLOCK_SIZE 512
 
 #ifndef NO_ERROR_CHECKS
 #define CHECK_CUDA_ERROR(expr) { if ((expr) != cudaSuccess) { printf("Error when executing cuda function"); } } 
@@ -56,7 +56,7 @@ if (blockSize >= n) { \
 #define UNROLLED_ADD(n) { \
 	if (blockSize >= n) { \
 		sdata[tid] = localSum = localSum + sdata[tid + n/2]; \
-	} \
+	} __syncthreads();\
 }
 
  template<unsigned int blockSize>
@@ -101,6 +101,7 @@ __global__ void devVectorDot(const floatType* __restrict__ a, const floatType* _
 		ab[blockIdx.x] = localSum;
 	}
 	__syncthreads();
+
 }
 
 /* a <- <x,x> */
@@ -164,19 +165,11 @@ __global__ void matvec(const int n, const int nnz, const int maxNNZ, const float
 	int row = blockIdx.x * blockDim.x + threadIdx.x;
 	int col;
 	if (row < n) {
-		float temp = 0;	
+		floatType temp = 0;	
 		for (col = 0; col < length[row]; col++) {
 			int k = col * n + row;
-			#ifdef DEBUG
-			printf("matvec temp at %i/%i = %f\n", col, k, temp);
-			printf("matvec data[%i] = %f, x[%i] = %f, indices[%i] = %i\n", k, data[k], indices[k], x[indices[k]],
-				k, indices[k]);
-			#endif
 			temp += data[k] * x[indices[k]];
 		}
-		#ifdef DEBUG
-		printf("matvec y[%i] = %f\n", row, temp);
-		#endif
 		y[row] = temp;
 	}
 }
@@ -196,13 +189,14 @@ void vectorSquare(const floatType* __restrict__ x, const int n, floatType* __res
 
 	if (devOut == NULL) {
 		CHECK_CUDA_ERROR(cudaMalloc(&devOut, size));
-		out = (floatType*) malloc(size);
+		CHECK_CUDA_ERROR(cudaMallocHost(&out, size));
 	}
 	
 	devVectorSquare<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(x, n, devOut);
 	printError();
 
 	CHECK_CUDA_ERROR(cudaMemcpy(out, devOut, size, cudaMemcpyDeviceToHost));
+	cudaDeviceSynchronize();
 
 	floatType temp = 0;
 	for (int i = 0; i < numBlocks; i++) {
@@ -224,14 +218,14 @@ void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b,
 
 	if (devOut == NULL) {
 		CHECK_CUDA_ERROR(cudaMalloc(&devOut, size));
-		out = (floatType*) malloc(size);
+		CHECK_CUDA_ERROR(cudaMallocHost(&out, size));
 	}
 
 	devVectorDot<threadsPerBlock><<<numBlocks, threadsPerBlock, threadsPerBlock*sizeof(floatType)>>>(a, b, n, devOut);
 	printError();
 
 	CHECK_CUDA_ERROR(cudaMemcpy(out, devOut, size, cudaMemcpyDeviceToHost));
-
+	cudaDeviceSynchronize();
 	floatType temp = 0;
 	for (int i = 0; i < numBlocks; i++) {
 		temp += out[i];
@@ -243,7 +237,7 @@ void vectorDot(const floatType* __restrict__ a, const floatType* __restrict__ b,
 void nrm2(const floatType* __restrict__ x, const int n, floatType* __restrict__ nrm) {
 	floatType temp;
 	vectorSquare(x, n, &temp);
-	*nrm = sqrt(temp);
+	*nrm = rsqrt(temp);
 }
 
 __global__ void diagMult(const floatType* __restrict__ diag, const floatType* __restrict__ x, const int n, floatType* __restrict__ out) {
@@ -251,9 +245,6 @@ __global__ void diagMult(const floatType* __restrict__ diag, const floatType* __
 
 	if (i < n) {
 		out[i] = x[i]/diag[i];
-		#ifdef DEBUG
-		printf("diagMult: diag[%i] = %f, x[%i] = %f, out[%i] = %f\n", i, diag[i], i, x[i], i, out[i]);
-		#endif
 	}
 }
 
@@ -266,9 +257,6 @@ __global__ void getDiag(const int n, const int nnz, const int maxNNZ, const floa
 			int realcol = indices[idx];
 			if (i == realcol) {
 				diag[i] = data[idx];
-				#ifdef DEBUG
-				printf("getDiag: diag[%i] = %f\n", i, diag[i]);
-				#endif
 			}
 		}
 	}
@@ -366,7 +354,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 
 	/* Calculate initial residuum */
 	nrm2(devR, n, &bnrm2);
-	bnrm2 = 1.0 /bnrm2;
+	printf("bnrm2: %e\n", bnrm2);
 
 	/* p(0)    = z(0) */
 	CHECK_CUDA_ERROR(cudaMemcpy(devP, devZ, fvecSize, cudaMemcpyDeviceToDevice));
@@ -375,7 +363,6 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	/* rho(0)    =  <r(0),z(0)> */
 	vectorSquare(devR, n, &check);
 	printf("rho_0=%e/%e\n", rho, check);
-
 	for(iter = 0; iter < sc->maxIter; iter++){
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
@@ -413,7 +400,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		vectorSquare(devR, n, &check);
 
 		/* Normalize the residual with initial one */
-		sc->residual= sqrt(check) * bnrm2;
+		sc->residual = sqrt(check) * bnrm2;
    	
 		/* Check convergence ||r(k+1)||_2 < eps
 		 * If the residual is smaller than the CG
@@ -421,15 +408,19 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		 * environment variable our solution vector
 		 * is good enough and we can stop the 
 		 * algorithm. */
+		#ifdef DEBUG
+		#define RESIDUAL_DEBUG
+		#endif
 		#ifdef RESIDUAL_DEBUG
 		printf("res_%d=%e\n", iter+1, sc->residual);
 		printf("rhores_%d=%e\n", iter+1, sqrt(rho)*bnrm2);
 		printf("rhores_%d=%e\n", iter+1, rho);
 		printf("check_%d=%e\n", iter+1, check);
 		#endif
-		if(sc->residual <= sc->tolerance)
+		if(sc->residual < sc->tolerance) {
 			break;
-
+		}
+		
 
 		/* beta      = rho(k+1) / rho(k) */
 		beta = rho / rho_old;

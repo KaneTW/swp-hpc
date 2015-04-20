@@ -28,7 +28,7 @@ cuda: CUDA_CC = nvcc
 cuda: LINKER = ${CUDA_CC}
 cuda: C_FLAGS += -D__global__= -Wall
 ifeq ($(dbg),1)
-cuda: CUDA_FLAGS += -O0 -DCUDA -DDEBUG ${FLAGS_DEBUG} -arch=sm_20 
+cuda: CUDA_FLAGS += -O0 -DCUDA -DDEBUG ${FLAGS_DEBUG} -arch=sm_20 -G
 else
 cuda: CUDA_FLAGS += -O3 -DCUDA -arch=sm_20 
 cuda: C_FLAGS += -g 
