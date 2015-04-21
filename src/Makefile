@@ -30,7 +30,7 @@ cuda: C_FLAGS += -D__global__= -Wall -DCUDA -I/usr/local_rwth/sw/cuda/6.5.14/inc
 ifeq ($(dbg),1)
 cuda: CUDA_FLAGS += -O0 -DCUDA -DDEBUG ${FLAGS_DEBUG} -arch=sm_20 -G
 else
-cuda: CUDA_FLAGS += -O3 -DCUDA -arch=sm_20
+cuda: CUDA_FLAGS += -O3 -DCUDA -arch=sm_20 -DNO_TIMING -DNO_ERROR_CHECKS
 cuda: C_FLAGS += -g -march=native -mtune=native -funroll-loops 
 endif
 cuda: cg.exe

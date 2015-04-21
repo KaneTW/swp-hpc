@@ -67,7 +67,6 @@ __global__ void devVectorDot(const floatType* __restrict__ const a, const floatT
 	const int gridSize = blockSize*2 * gridDim.x;
 
 	floatType localSum = 0;
-	#pragma unroll 2
 	while (i < n) {
 		localSum += a[i]*b[i];
 		#ifdef DEBUG
@@ -114,7 +113,6 @@ __global__ void devVectorSquare(const floatType* __restrict__ const x, const int
 
 	floatType localSum = 0;
 
-	#pragma unroll 2
 	while (i < n) {
 		localSum += x[i]*x[i];
 		if (i + blockSize < n)
@@ -199,7 +197,7 @@ __global__ void matvecRef(const int n, const int nnz, const int maxNNZ, const fl
 
 // optimize a bit for G3
 #define REDUCTION_BLOCK_SIZE 128
-#define REDUCTION_BLOCK_COUNT(n) 64
+#define REDUCTION_BLOCK_COUNT(n) REDUCTION_GRID_SIZE
 
 void vectorSquare(const floatType* __restrict__ const x, const int n, floatType* __restrict__ a) {
 	const int threadsPerBlock = REDUCTION_BLOCK_SIZE;
@@ -261,7 +259,7 @@ __global__ void getDiag(const int n, const int nnz, const int maxNNZ, const floa
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < n) {
 		int j;
-		#pragma unroll 2
+		#pragma unroll
 		for (j = 0; j < length[i]; j++) {
 			int idx = j*n + i;
 			int realcol = indices[idx];
@@ -301,10 +299,11 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
  	float timeMatvec_s;
  	float timeMatvec=0;
 
+#ifndef NO_TIMING
  	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
-	
+#endif
 	/* allocate memory */
 	const size_t fvecSize = n * sizeof(floatType);
 	const size_t ivecSize = n * sizeof(int);
@@ -367,14 +366,17 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 
 	
 	/* r(0)    = b - Ax(0) */
+#ifndef NO_TIMING
 	cudaEventRecord(start);
+#endif
 	LAUNCH(matvec)(n, nnz, maxNNZ, devData, devIndices, devLength, devX, devR);
 	printError();
+#ifndef NO_TIMING
 	cudaEventRecord(stop);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timeMatvec_s, start, stop);
 	timeMatvec += timeMatvec_s/1000;
-
+#endif
 	LAUNCH(xpay)(devB, -1.0, n, devR);
 	printError();
 
@@ -398,13 +400,17 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
 		/* q(k)      = A * p(k) */
+#ifndef NO_TIMING
 		cudaEventRecord(start);
+#endif
 		LAUNCH(matvecRef)(n, nnz, maxNNZ, devData, devIndices, devLength, devQ);
 		printError();	
+#ifndef NO_TIMING
 		cudaEventRecord(stop);
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&timeMatvec_s, start, stop);
 		timeMatvec += timeMatvec_s/1000;
+#endif
 
 		/* dot_pq    = <p(k),q(k)> */
 		vectorDot(devP, devQ, n, &dot_pq);

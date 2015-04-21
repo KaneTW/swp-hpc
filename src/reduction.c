@@ -5,7 +5,7 @@
 #include <pmmintrin.h>
 floatType reduce(floatType* __restrict__ const array, int n) {
 	//array is aligned due to cuda, and n is 64 in current code
-	assert(n == 64);
+	assert(n == REDUCTION_GRID_SIZE);
 	assert(((uintptr_t)array & 63) == 0);
 	int i;
 	floatType temp1 = 0;
