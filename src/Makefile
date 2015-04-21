@@ -23,15 +23,16 @@ openacc: cg.exe
 
 
 # To load the CUDA compiler use: $ module switch intel gcc; module load cuda
-cuda: CC = gcc
+cuda: CC = icc
 cuda: CUDA_CC = nvcc
 cuda: LINKER = ${CUDA_CC}
 cuda: C_FLAGS += -D__global__= -Wall -DCUDA -I/usr/local_rwth/sw/cuda/6.5.14/include/
 ifeq ($(dbg),1)
 cuda: CUDA_FLAGS += -O0 -DCUDA -DDEBUG ${FLAGS_DEBUG} -arch=sm_20 -G
 else
-cuda: CUDA_FLAGS += -O3 -DCUDA -arch=sm_20 -DNO_TIMING -DNO_ERROR_CHECKS
-cuda: C_FLAGS += -g -march=native -mtune=native -funroll-loops 
+cuda: CUDA_FLAGS += -ccbin icc -O3 -DCUDA -arch=sm_21 -DNO_TIMING -DNO_ERROR_CHECKS
+# cuda: C_FLAGS += -g -march=native -mtune=native -funroll-loops
+cuda: C_FLAGS += -opt-subscript-in-range -opt-prefetch -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -xHost -fp-model fast=2 -restrict 
 endif
 cuda: cg.exe
 
