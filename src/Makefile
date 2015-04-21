@@ -1,6 +1,6 @@
 
 MAT_DIR = /home/lect0005/matrix
-OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o 
+OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o  reduction.o
 SRC = $(OBJ:%.o=%.c?)
 HDR = $(OBJ:%.o=%.h) 
 
@@ -31,7 +31,7 @@ ifeq ($(dbg),1)
 cuda: CUDA_FLAGS += -O0 -DCUDA -DDEBUG ${FLAGS_DEBUG} -arch=sm_20 -G
 else
 cuda: CUDA_FLAGS += -O3 -DCUDA -arch=sm_20 
-cuda: C_FLAGS += -g 
+cuda: C_FLAGS += -g -march=native -mtune=native -funroll-loops 
 endif
 cuda: cg.exe
 
