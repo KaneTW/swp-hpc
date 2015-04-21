@@ -13,7 +13,7 @@ floatType reduce(floatType* __restrict__ const array, int n) {
 	floatType temp3 = 0;
 	floatType temp4 = 0;
 
-	#pragma loop count REDUCTION_GRID_SIZE/4
+	#pragma loop_count REDUCTION_GRID_SIZE/4
 	for (i = 0; i < n; i += 4) {
 		temp1 += array[i];
 		temp2 += array[i+1];
