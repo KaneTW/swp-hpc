@@ -203,6 +203,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 	/* Calculate initial residuum */
 	nrm2(r, n, &bnrm2);
 	bnrm2 = 1.0/bnrm2;
+	printf("bnrm2: %e\n", bnrm2);
 	
 	parallelMemcpy(z, n, p);
 	DBGVEC("p = z = ", p, n);
@@ -253,7 +254,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		 * environment variable our solution vector
 		 * is good enough and we can stop the 
 		 * algorithm. */
-		printf("res_%d=%e\n", iter+1, sc->residual);
+		//printf("res_%d=%e\n", iter+1, sc->residual);
 		if(sc->residual <= sc->tolerance)
 			break;
 
@@ -266,6 +267,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* data, con
 		DBGVEC("p = z + beta * p> = ", p, n);
 
 	}
+	printf("res_%d=%e\n", iter+1, sc->residual);
 
 	/* Store the number of iterations and the 
 	 * time for the sparse matrix vector
