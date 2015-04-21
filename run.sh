@@ -18,16 +18,15 @@
 #BSUB -M 1024
  
 ### Request the number of compute slots you want to use
-#BSUB -n 12
- 
+#BSUB -n 1
+
 ### Use esub for OpenMP/shared memeory jobs
 #BSUB -a openmp
 #BSUB -x
 #BSUB -m mpi-s
-
 ### Change to the work directory
-cd /home/dk406646/swp-hpc/src
+cd /home/dk406646/swp-hpc-openmp/src
  
 ### Execute your application
-
-CG_MAX_ITER=6000 OMP_PLACES=cores OMP_PROC_BIND=spread  ./cg.exe /home/lect0005/matrix/G3_circuit.mtx
+module switch intel intel/15.0
+OMP_NUM_THREADS=12 CG_MAX_ITER=6000 OMP_PLACES=cores OMP_PROC_BIND=spread ./cg.exe /home/lect0005/matrix/G3_circuit.mtx
