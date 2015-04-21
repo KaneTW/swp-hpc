@@ -22,7 +22,9 @@
  
 ### Use esub for OpenMP/shared memeory jobs
 #BSUB -a openmp
- 
+#BSUB -x
+#BSUB -m mpi-s
+
 ### Change to the work directory
 cd /home/dk406646/swp-hpc/src
  
