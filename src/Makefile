@@ -1,6 +1,5 @@
-
 MAT_DIR = /home/lect0005/matrix
-OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o  reduction.o
+OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c?)
 HDR = $(OBJ:%.o=%.h) 
 
@@ -18,7 +17,7 @@ openmp: cg.exe
 
 # To load the PGI compiler use: $ module switch intel pgi
 openacc: CC = pgcc
-openacc: C_FLAGS += -acc -Minfo=accel -ta=nvidia,cc20 -Mlarge_arrays
+openacc: C_FLAGS += -acc -Minfo=all -ta=nvidia,cc20,cuda6.5,time,keepgpu,unroll,fma -Mlarge_arrays  -O3
 openacc: cg.exe
 
 
@@ -37,7 +36,7 @@ endif
 cuda: cg.exe
 
 cg.exe: ${OBJ}
-	${LINKER} ${CUDA_FLAGS} -o cg.exe ${OBJ} ${LINKER_FLAGS} 
+	${LINKER} ${C_FLAGS} -o cg.exe ${OBJ} ${LINKER_FLAGS} 
 
 %.o: %.c
 	${CC} ${C_FLAGS} -c $<
@@ -50,7 +49,7 @@ cg.exe: ${OBJ}
 # For basic performance analysis it might be enough to run less iterations
 # and compare the GFLOPS of the matrix vector product.
 run: openacc
-	CG_MAX_ITER=6000 OMP_NUM_THREADS=1 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
+	CG_MAX_ITER=6000 ./cg.exe $(MAT_DIR)/G3_circuit.mtx
 
 run_serena: openacc
 	CG_MAX_ITER=6000 OMP_NUM_THREADS=12 ./cg.exe $(MAT_DIR)/Serena.mtx

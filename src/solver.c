@@ -1,7 +1,7 @@
 /*****************************************************
  * CG Solver (HPC Software Lab)
  *
- * Parallel Programming Models for Applications in the 
+ * kernels  Programming Models for Applications in the 
  * Area of High-Performance Computation
  *====================================================
  * IT Center (ITC)
@@ -29,20 +29,20 @@
 
 
 /* y <- ax + y */
-void axpy(const floatType a, const floatType* __restrict__ const x, const int n, floatType* __restrict__ const y){
+void axpy(const floatType a, const floatType* restrict const x, const int n, floatType* restrict const y){
 	int i;
 
-	#pragma acc kernels loop independent
+	#pragma acc kernels loop independent gang vector(128)  private(i) default(none)   present(x[0:n],y[0:n]) 
 	for (i = 0; i < n; i++) {
 		y[i]=a*x[i]+y[i];
 	}
 }
 
 /* y <- x + ay */
-void xpay(const floatType* __restrict__ const x, const floatType a, const int n, floatType* __restrict__ const y){
+void xpay(const floatType* restrict const x, const floatType a, const int n, floatType* restrict const y){
 	int i;
 
-	#pragma acc kernels loop independent
+	#pragma acc kernels  loop gang vector(128)  private(i) default(none)   present(x[0:n],y[0:n])
 	for (i = 0; i < n; i++) {
 		y[i]=x[i]+a*y[i];
 	}
@@ -51,13 +51,13 @@ void xpay(const floatType* __restrict__ const x, const floatType a, const int n,
 
 /* y <- A*x
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
-void matvec(const int n, const int nnz, const int maxNNZ, const floatType* __restrict__ const data, const int* __restrict__ const indices, const int* __restrict__ const length, const floatType* __restrict__ const x, floatType* __restrict__ const y){
+void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, const floatType* restrict const x, floatType* restrict const y){
 	int row;
-	#pragma acc kernels loop independent
+	#pragma acc kernels loop independent gang vector(128)  private(row) default(none)  present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], x[0:n], y[0:n])
 	for (row = 0; row < n; row++) {
 		floatType temp = 0;	
 		int col;
-		#pragma acc loop vector reduction(+:temp)
+		#pragma acc loop seq reduction(+:temp) private(col)
 		for (col = 0; col < length[row]; col++) {
 			int k = col * n + row;
 			temp += data[k] * x[indices[k]];
@@ -66,47 +66,47 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* __res
 	}
 }
 
-void vectorDot(const floatType* __restrict__ const a, const floatType* __restrict__ const b, const int n, floatType* __restrict__ const ab) {
+void vectorDot(const floatType* restrict const a, const floatType* restrict const b, const int n, floatType* restrict const ab) {
 	int i;
 	floatType temp = 0;
 
-	#pragma acc kernels loop reduction(+:temp)
+	#pragma acc kernels  loop gang vector(128) reduction(+:temp) private(i) default(none)   present(a[0:n],b[0:n])
 	for (i=0; i<n; i++){
 		temp += a[i]*b[i];
 	}
 	*ab = temp;
 }
 
-void vectorSquare(const floatType* __restrict__ const x, const int n, floatType* __restrict__ const ab) {
+void vectorSquare(const floatType* restrict const x, const int n, floatType* restrict const ab) {
 	int i;
 	floatType temp = 0;
 
-	#pragma acc kernels loop reduction(+:temp)
+	#pragma acc kernels  loop gang vector(128) reduction(+:temp) private(i) default(none)   present(x[0:n])
 	for (i=0; i<n; i++){
 		temp += x[i]*x[i];
 	}
 	*ab = temp;
 }
 
-void nrm2(const floatType* __restrict__ const x, const int n, floatType* __restrict__ const nrm) {
+void nrm2(const floatType* restrict const x, const int n, floatType* restrict const nrm) {
 	floatType temp;
 	vectorSquare(x, n, &temp);
-	*nrm = rsqrt(temp);
+	*nrm = 1/sqrt(temp);
 }
 
-void diagMult(const floatType* __restrict__ const diag, const floatType* __restrict__ const x, const int n, floatType* __restrict__ const out) {
+void diagMult(const floatType* restrict const diag, const floatType* restrict const x, const int n, floatType* restrict const out) {
 	int i;
 
-	#pragma acc kernels loop independent
+	#pragma acc kernels  loop gang vector(128)  private(i) default(none)   present(x[0:n],diag[0:n], out[0:n])
 	for (i=0; i<n; i++){
 		out[i] = x[i]/diag[i];
 	}
 }
 
-void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* __restrict__ const data, const int* __restrict__ const indices, const int* __restrict__ const length, floatType* __restrict__ const diag) {
+void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, floatType* restrict const diag) {
 	int i;
 
-	#pragma acc kernels loop independent
+	#pragma acc kernels  loop gang vector(128)  private(i) default(none)   present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], diag[0:n])
 	for (i=0; i<n; i++) {
 		int j;
 		for (j = 0; j < length[i]; j++) {
@@ -141,7 +141,7 @@ void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* __re
    beta      = rho(k+1) / rho(k)
    p(k+1)    = r(k+1) + beta*p(k)      
 ***************************************/
-void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restrict__ const data, const int* __restrict__ const indices, const int* __restrict__ const length, const floatType* __restrict__ const b, floatType* __restrict__ const x, struct SolverConfig* sc){
+void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, const floatType* restrict const b, floatType* restrict const x, struct SolverConfig* sc){
 	floatType *r, *p, *q, *z, *diag;
 	floatType alpha, beta, rho, rho_old, dot_pq, bnrm2, check;
 	int iter;
@@ -152,20 +152,24 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	const size_t matCount = n * maxNNZ;
 	const size_t fmatSize = matCount * sizeof(floatType);
 	const size_t imatSize = matCount * sizeof(int);
+	r = malloc(fvecSize);
+	p = malloc(fvecSize);
+	q = malloc(fvecSize);
+	z = malloc(fvecSize);
+	diag = malloc(fvecSize);
 
-
-	#pragma acc enter data create(r[0:n], q[0:n])
-	#pragma acc enter data create(z[0:n], diag[0:n]) copyin(b[0:n])
-	#pragma acc enter data copyin(data[0:matCount], indices[0:matCount], length[0:n])
-	#pragma acc enter data copyin(x[0:n])
+	#pragma acc enter data create(r[0:n], q[0:n], diag[0:n], z[0:n])
+	#pragma acc enter data copyin(data[0:matCount])
+	#pragma acc enter data copyin(indices[0:matCount], length[0:n])
+	#pragma acc enter data copyin(x[0:n], b[0:n])
 
 	getDiag(n, nnz, maxNNZ, data, indices, length, diag);
-
 
 	matvec(n, nnz, maxNNZ, data, indices, length, x, r);
 	
 	xpay(b, -1.0, n, r);
-	diagMult(diag, r, n, z)
+	diagMult(diag, r, n, z);
+	#pragma acc update host(z[0:n])
 	memcpy(p, z, fvecSize);
 	#pragma acc enter data copyin(p[0:n])
 	
@@ -181,8 +185,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
 		/* q(k)      = A * p(k) */
-
-		matvec(n, nnz, maxNNZ, data, indices, length, q);
+		matvec(n, nnz, maxNNZ, data, indices, length, p, q);
 
 		/* dot_pq    = <p(k),q(k)> */
 		vectorDot(p, q, n, &dot_pq);
@@ -236,7 +239,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* __restric
 	 * product which is the most expensive 
 	 * function in the whole CG algorithm. */
 	sc->iter = iter;
-	sc->timeMatvec = timeMatvec;
+	sc->timeMatvec = 0;
 
 	/* Clean up */
 	// todo do we really need to?2

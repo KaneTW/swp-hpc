@@ -32,8 +32,6 @@
 #include "output.h"
 #include "io.h"
 
-//#define CHECK_CUDA_ERROR(expr) { if ((expr) != cudaSuccess) { printf("Error when executing cuda function"); } }
-#define CHECK_CUDA_ERROR(expr) (expr)
 
 /* Init the right hand side (rhs), so that the solution is one for 
  * every entry in the x vector. Please note that due to rounding
@@ -158,8 +156,8 @@ int main(int argc, char *argv[]){
 	ioTime = getWTime() - ioTime;
 
 	/* Allocate memory for the LGS */
-	CHECK_CUDA_ERROR(cudaMallocHost(&b, n * sizeof(floatType)));
-	CHECK_CUDA_ERROR(cudaMallocHost(&x, n * sizeof(floatType)));
+	b = malloc(n * sizeof(floatType));
+	x = malloc(n * sizeof(floatType));
 
 	/* Init the LGS */
 	initLGS(n, nnz, maxNNZ, data, indices, length, b, x);
@@ -214,10 +212,7 @@ int main(int argc, char *argv[]){
 
 
 	/* Clean up */
-	cudaFreeHost(b);
-	cudaFreeHost(x);
 	destroyMatrix(data, indices, length);
-	cudaDeviceReset();
 
 	totalTime = getWTime() - totalTime;
 

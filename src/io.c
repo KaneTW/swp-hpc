@@ -94,7 +94,7 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 
 	/* Allocate some of the memory for the ELLPACK-R matrix */
-	cudaMallocHost(length, sizeof(int) * N);
+	*length = malloc(sizeof(int) * N);
 
 	/* Check if the memory was allocated successfully */
 	if (*length == NULL) {
@@ -172,8 +172,8 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 	}
 
 	/* Allocate the rest of the memory for the ELLPACK-R matrix */
-	cudaMallocHost(data, sizeof(floatType) * N * (*maxNNZ));
-	cudaMallocHost(indices, sizeof(int) * N * (*maxNNZ));
+	*data = malloc(sizeof(floatType) * N * (*maxNNZ));
+	*indices = malloc(sizeof(int) * N * (*maxNNZ));
 
 	/* Check if the memory was allocated successfully */
 	if (*data == NULL || *indices == NULL) {
@@ -212,9 +212,9 @@ void parseMM(char *filename, int* n, int* nnz, int* maxNNZ, floatType** data, in
 
 /* Free the complete memory of the matrix in ELLPACK-R format */
 void destroyMatrix(floatType* data, int* indices, int* length) {
-	cudaFreeHost(data);
-	cudaFreeHost(indices);
-	cudaFreeHost(length);
+	free(data);
+	free(indices);
+	free(length);
 }
 
 /* Print out to std the first n elements of the vector x */
