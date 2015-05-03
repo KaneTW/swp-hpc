@@ -54,10 +54,8 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 		floatType temp = 0;	
 		int col;
 		#pragma acc loop seq private(col) 
-		for (col = 0; col < length[row]; col+=2) { // i fucking hate openacc
+		for (col = 0; col < length[row]; col++) {
 			int k = col * n + row;
-			temp += data[k] * x[indices[k]];
-			k += n; // unroll once
 			temp += data[k] * x[indices[k]];
 		}
 
