@@ -1,16 +1,3 @@
-/*****************************************************
- * CG Solver (HPC Software Lab)
- *
- * kernels  Programming Models for Applications in the 
- * Area of High-Performance Computation
- *====================================================
- * IT Center (ITC)
- * RWTH Aachen University, Germany
- * Author: Tim Cramer (cramer@itc.rwth-aachen.de)
- * 	   Fabian Schneider (f.schneider@itc.rwth-aachen.de)
- * Date: 2010 - 2015
- *****************************************************/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +19,8 @@
 void axpy(const floatType a, const floatType* restrict const x, const int n, floatType* restrict const y){
 	int i;
 
-	#pragma acc kernels loop independent gang vector(128)  private(i) default(none)   present(x[0:n],y[0:n]) 
+	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n], y[0:n])
+	#pragma acc loop independent gang, vector  
 	for (i = 0; i < n; i++) {
 		y[i]=a*x[i]+y[i];
 	}
@@ -42,7 +30,8 @@ void axpy(const floatType a, const floatType* restrict const x, const int n, flo
 void xpay(const floatType* restrict const x, const floatType a, const int n, floatType* restrict const y){
 	int i;
 
-	#pragma acc kernels  loop gang vector(128)  private(i) default(none)   present(x[0:n],y[0:n])
+	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n],y[0:n])
+	#pragma acc loop independent gang, vector 
 	for (i = 0; i < n; i++) {
 		y[i]=x[i]+a*y[i];
 	}
@@ -53,11 +42,13 @@ void xpay(const floatType* restrict const x, const floatType a, const int n, flo
  * Remember that A is stored in the ELLPACK-R format (data, indices, length, n, nnz, maxNNZ). */
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, const floatType* restrict const x, floatType* restrict const y){
 	int row;
-	#pragma acc kernels loop independent gang vector(128)  private(row) default(none)  present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], x[0:n], y[0:n])
+
+	#pragma acc parallel num_gangs(100) vector_length(256) present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], x[0:n], y[0:n])
+        #pragma acc loop independent gang, vector 
 	for (row = 0; row < n; row++) {
 		floatType temp = 0;	
 		int col;
-		#pragma acc loop seq reduction(+:temp) private(col)
+		#pragma acc loop seq
 		for (col = 0; col < length[row]; col++) {
 			int k = col * n + row;
 			temp += data[k] * x[indices[k]];
@@ -70,7 +61,8 @@ void vectorDot(const floatType* restrict const a, const floatType* restrict cons
 	int i;
 	floatType temp = 0;
 
-	#pragma acc kernels  loop gang vector(128) reduction(+:temp) private(i) default(none)   present(a[0:n],b[0:n])
+	#pragma acc parallel num_gangs(100) vector_length(256) present(a[0:n],b[0:n])
+	#pragma acc loop reduction(+:temp) private(i) 
 	for (i=0; i<n; i++){
 		temp += a[i]*b[i];
 	}
@@ -81,10 +73,12 @@ void vectorSquare(const floatType* restrict const x, const int n, floatType* res
 	int i;
 	floatType temp = 0;
 
-	#pragma acc kernels  loop gang vector(128) reduction(+:temp) private(i) default(none)   present(x[0:n])
+	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n])
+	#pragma acc loop reduction(+:temp)
 	for (i=0; i<n; i++){
 		temp += x[i]*x[i];
 	}
+
 	*ab = temp;
 }
 
@@ -97,7 +91,8 @@ void nrm2(const floatType* restrict const x, const int n, floatType* restrict co
 void diagMult(const floatType* restrict const diag, const floatType* restrict const x, const int n, floatType* restrict const out) {
 	int i;
 
-	#pragma acc kernels  loop gang vector(128)  private(i) default(none)   present(x[0:n],diag[0:n], out[0:n])
+	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n],diag[0:n], out[0:n])
+	#pragma acc loop independent gang, vector
 	for (i=0; i<n; i++){
 		out[i] = x[i]/diag[i];
 	}
@@ -106,7 +101,8 @@ void diagMult(const floatType* restrict const diag, const floatType* restrict co
 void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, floatType* restrict const diag) {
 	int i;
 
-	#pragma acc kernels  loop gang vector(128)  private(i) default(none)   present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], diag[0:n])
+	#pragma acc parallel num_gangs(100) vector_length(256) present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], diag[0:n])
+	#pragma acc loop independent gang, vector
 	for (i=0; i<n; i++) {
 		int j;
 		for (j = 0; j < length[i]; j++) {
@@ -119,28 +115,6 @@ void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* rest
 	}
 }
 
-/***************************************
- *         Conjugate Gradient          *
- *   This function will do the CG      *
- *  algorithm without preconditioning. *
- *    For optimiziation you must not   *
- *        change the algorithm.        *
- ***************************************
- r(0)    = b - Ax(0)
- p(0)    = r(0)
- rho(0)    =  <r(0),r(0)>                
- ***************************************
- for k=0,1,2,...,n-1
-   q(k)      = A * p(k)                 
-   dot_pq    = <p(k),q(k)>             
-   alpha     = rho(k) / dot_pq
-   x(k+1)    = x(k) + alpha*p(k)      
-   r(k+1)    = r(k) - alpha*q(k)     
-   check convergence ||r(k+1)||_2 < eps  
-	 rho(k+1)  = <r(k+1), r(k+1)>         
-   beta      = rho(k+1) / rho(k)
-   p(k+1)    = r(k+1) + beta*p(k)      
-***************************************/
 void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, const floatType* restrict const b, floatType* restrict const x, struct SolverConfig* sc){
 	floatType *r, *p, *q, *z, *diag;
 	floatType alpha, beta, rho, rho_old, dot_pq, bnrm2, check;
@@ -168,6 +142,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 	matvec(n, nnz, maxNNZ, data, indices, length, x, r);
 	
 	xpay(b, -1.0, n, r);
+	//todo ugh
 	diagMult(diag, r, n, z);
 	#pragma acc update host(z[0:n])
 	memcpy(p, z, fvecSize);
@@ -176,32 +151,32 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 	/* Calculate initial residuum */
 	nrm2(r, n, &bnrm2);
 
-	/* check(0)    =  <r(0),r(0)> */
-	/* rho(0)    =  <r(0),z(0)> */
+	/* check(0)  = <r(0),r(0)> */
+	/* rho(0)  = <r(0),z(0)> */
 	vectorDot(r, z, n, &rho);
 	vectorSquare(r, n, &check);
 	printf("rho_0=%e/%e\n", rho, check);
 	for(iter = 0; iter < sc->maxIter; iter++){
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
-		/* q(k)      = A * p(k) */
+		/* q(k)   = A * p(k) */
 		matvec(n, nnz, maxNNZ, data, indices, length, p, q);
 
-		/* dot_pq    = <p(k),q(k)> */
+		/* dot_pq  = <p(k),q(k)> */
 		vectorDot(p, q, n, &dot_pq);
 
-		/* alpha     = rho(k) / dot_pq */
+		/* alpha   = rho(k) / dot_pq */
 		alpha = rho / dot_pq;
 
-		/* x(k+1)    = x(k) + alpha*p(k) */
+		/* x(k+1)  = x(k) + alpha*p(k) */
 		axpy(alpha, p, n, x);
 
-		/* r(k+1)    = r(k) - alpha*q(k) */
+		/* r(k+1)  = r(k) - alpha*q(k) */
 		axpy(-alpha, q, n, r);
 
 		rho_old = rho;
 
-		/* rho(k+1)  = <r(k+1), z(k+1)> */
+		/* rho(k+1) = <r(k+1), z(k+1)> */
 		diagMult(diag, r, n, z);
 
 		vectorDot(r, z, n, &rho);
@@ -209,7 +184,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 
 		/* Normalize the residual with initial one */
 		sc->residual = sqrt(check) * bnrm2;
-   	
+  	
 		/* Check convergence ||r(k+1)||_2 < eps
 		 * If the residual is smaller than the CG
 		 * tolerance specified in the CG_TOLERANCE
@@ -223,10 +198,10 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 		}
 		
 
-		/* beta      = rho(k+1) / rho(k) */
+		/* beta   = rho(k+1) / rho(k) */
 		beta = rho / rho_old;
 
-		/* p(k+1)    = r(k+1) + beta*p(k) */
+		/* p(k+1)  = r(k+1) + beta*p(k) */
 		xpay(z, beta, n, p);
 	}
 	
