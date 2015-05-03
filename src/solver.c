@@ -53,8 +53,9 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 	for (row = 0; row < n; row++) {
 		floatType temp = 0;	
 		int col;
+		int len = length[row];
 		#pragma acc loop seq private(col) 
-		for (col = 0; col < length[row]; col++) {
+		for (col = 0; col < len; col++) {
 			int k = col * n + row;
 			temp += data[k] * x[indices[k]];
 		}
