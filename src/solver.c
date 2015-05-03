@@ -15,11 +15,16 @@
 #include "output.h"
 
 
+#define NUM_GANGS 64
+#define VECTOR_LENGTH 192
+#define RED_NUM_GANGS 64
+#define RED_VECTOR_LENGTH 192
+
 /* y <- ax + y */
 void axpy(const floatType a, const floatType* restrict const x, const int n, floatType* restrict const y){
 	int i;
 
-	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n], y[0:n])
+	#pragma acc parallel num_gangs(NUM_GANGS) vector_length(VECTOR_LENGTH) present(x[0:n], y[0:n])
 	#pragma acc loop independent gang, vector  
 	for (i = 0; i < n; i++) {
 		y[i]=a*x[i]+y[i];
@@ -30,7 +35,7 @@ void axpy(const floatType a, const floatType* restrict const x, const int n, flo
 void xpay(const floatType* restrict const x, const floatType a, const int n, floatType* restrict const y){
 	int i;
 
-	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n],y[0:n])
+	#pragma acc parallel num_gangs(NUM_GANGS) vector_length(VECTOR_LENGTH) present(x[0:n],y[0:n])
 	#pragma acc loop independent gang, vector 
 	for (i = 0; i < n; i++) {
 		y[i]=x[i]+a*y[i];
@@ -43,16 +48,19 @@ void xpay(const floatType* restrict const x, const floatType a, const int n, flo
 void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, const floatType* restrict const x, floatType* restrict const y){
 	int row;
 
-	#pragma acc parallel num_gangs(100) vector_length(256) present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], x[0:n], y[0:n])
-        #pragma acc loop independent gang, vector 
+	#pragma acc parallel vector_length(128) present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], x[0:n], y[0:n])
+        #pragma acc loop independent gang, vector private(row) 
 	for (row = 0; row < n; row++) {
 		floatType temp = 0;	
 		int col;
-		#pragma acc loop seq
-		for (col = 0; col < length[row]; col++) {
+		#pragma acc loop seq private(col) 
+		for (col = 0; col < length[row]; col+=2) { // i fucking hate openacc
 			int k = col * n + row;
 			temp += data[k] * x[indices[k]];
+			k += n; // unroll once
+			temp += data[k] * x[indices[k]];
 		}
+
 		y[row] = temp;
 	}
 }
@@ -60,8 +68,7 @@ void matvec(const int n, const int nnz, const int maxNNZ, const floatType* restr
 void vectorDot(const floatType* restrict const a, const floatType* restrict const b, const int n, floatType* restrict const ab) {
 	int i;
 	floatType temp = 0;
-
-	#pragma acc parallel num_gangs(100) vector_length(256) present(a[0:n],b[0:n])
+	#pragma acc parallel num_gangs(RED_NUM_GANGS) vector_length(RED_VECTOR_LENGTH) present(a[0:n],b[0:n])
 	#pragma acc loop reduction(+:temp) private(i) 
 	for (i=0; i<n; i++){
 		temp += a[i]*b[i];
@@ -73,7 +80,7 @@ void vectorSquare(const floatType* restrict const x, const int n, floatType* res
 	int i;
 	floatType temp = 0;
 
-	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n])
+	#pragma acc parallel num_gangs(RED_NUM_GANGS) vector_length(RED_VECTOR_LENGTH) present(x[0:n])
 	#pragma acc loop reduction(+:temp)
 	for (i=0; i<n; i++){
 		temp += x[i]*x[i];
@@ -91,17 +98,17 @@ void nrm2(const floatType* restrict const x, const int n, floatType* restrict co
 void diagMult(const floatType* restrict const diag, const floatType* restrict const x, const int n, floatType* restrict const out) {
 	int i;
 
-	#pragma acc parallel num_gangs(100) vector_length(256) present(x[0:n],diag[0:n], out[0:n])
+	#pragma acc parallel num_gangs(NUM_GANGS) vector_length(VECTOR_LENGTH) present(x[0:n],diag[0:n], out[0:n])
 	#pragma acc loop independent gang, vector
 	for (i=0; i<n; i++){
-		out[i] = x[i]/diag[i];
+		out[i] = x[i]*diag[i];
 	}
 }
 
 void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* restrict const data, const int* restrict const indices, const int* restrict const length, floatType* restrict const diag) {
 	int i;
 
-	#pragma acc parallel num_gangs(100) vector_length(256) present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], diag[0:n])
+	#pragma acc parallel num_gangs(NUM_GANGS) vector_length(VECTOR_LENGTH) present(data[0:n*maxNNZ], indices[0:n*maxNNZ], length[0:n], diag[0:n])
 	#pragma acc loop independent gang, vector
 	for (i=0; i<n; i++) {
 		int j;
@@ -109,7 +116,7 @@ void getDiag(const int n, const int nnz, const int maxNNZ, const floatType* rest
 			int idx = j*n + i;
 			int realcol = indices[idx];
 			if (i == realcol) {
-				diag[i] = data[idx];
+				diag[i] = 1/data[idx];
 			}
 		}
 	}
@@ -135,7 +142,9 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 	#pragma acc enter data create(r[0:n], q[0:n], diag[0:n], z[0:n])
 	#pragma acc enter data copyin(data[0:matCount])
 	#pragma acc enter data copyin(indices[0:matCount], length[0:n])
-	#pragma acc enter data copyin(x[0:n], b[0:n])
+	#pragma acc enter data copyin(b[0:n])
+	#pragma acc data copy(x[0:n])
+	{
 
 	getDiag(n, nnz, maxNNZ, data, indices, length, diag);
 
@@ -204,8 +213,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 		/* p(k+1)  = r(k+1) + beta*p(k) */
 		xpay(z, beta, n, p);
 	}
-	
-	#pragma openacc exit data copyout(x[0:n])
+	}
 	printf("res_%d=%e\n", iter+1, sc->residual);
 
 
