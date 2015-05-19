@@ -173,6 +173,8 @@ int main(int argc, char *argv[]){
 	/* Solving the system of linear equations including the time measurement.
 	 * You should try to optimize this time, this will be valued for the
 	 * competition. */
+  acc_init(acc_device_nvidia);
+	
 	solveTime = getWTime();
 	cg(n, nnz, maxNNZ, data, indices, length, b, x, &sc);
 	solveTime = getWTime()-solveTime;
