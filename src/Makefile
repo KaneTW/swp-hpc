@@ -1,5 +1,5 @@
 SHELL = /bin/bash
-MAT_DIR = /home/dk406646/swp-hpc/G3_circuit
+MAT_DIR = /home/lect0005/matrix
 OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o 
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
