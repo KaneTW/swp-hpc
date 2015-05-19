@@ -199,7 +199,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 		 * environment variable our solution vector
 		 * is good enough and we can stop the 
 		 * algorithm. */
-		printf("res_%d=%e\n", iter+1, sc->residual);
+		//printf("res_%d=%e\n", iter+1, sc->residual);
 		
 		if(sc->residual < sc->tolerance) {
 			break;
