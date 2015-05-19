@@ -3,7 +3,7 @@ OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c?)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = ${FLAGS_FAST} -g 
+C_FLAGS = ${FLAGS_FAST}
 LINKER = ${CC}
 
 ifeq ($(dbg),1)
@@ -17,7 +17,7 @@ openmp: cg.exe
 
 # To load the PGI compiler use: $ module switch intel pgi
 openacc: CC = pgcc
-openacc: C_FLAGS += -acc -Minfo=all -Minline -ta=nvidia,cc20,cuda6.5,keepptx,keepgpu,time,fma,pin,maxregcount:28 -Mlarge_arrays  -O4 -Msafeptr=all -pg
+openacc: C_FLAGS += -acc -Minfo=all -Minline -ta=nvidia,cc20,cuda6.5,keepptx,keepgpu,fma,pin,maxregcount:28 -Mlarge_arrays  -O4 -Msafeptr=all
 openacc: cg.exe
 
 
