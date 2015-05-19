@@ -15,8 +15,12 @@ endif
 default: C_FLAGS += -prof-use
 default: openmp
 
+mkpgo:
+	rm -rf pgo
+	mkdir pgo
+
 profgen: C_FLAGS += -prof-gen=threadsafe
-profgen: clean openmp run
+profgen: mkpgo clean openmp run
 
 openmp: C_FLAGS += ${FLAGS_OPENMP}
 openmp: cg.exe

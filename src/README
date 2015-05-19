@@ -1,7 +1,9 @@
+# this file is executable and will do everything when used like ". README" or "source README"
 # build with
 module switch intel intel/15.0
-make 
+make profgen
+make clean default
 
 # run with
 module switch intel intel/15.0
-make
+make run
