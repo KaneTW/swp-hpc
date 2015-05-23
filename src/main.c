@@ -181,7 +181,7 @@ int main(int argc, char *argv[]){
 	
 	/* calculate flops. analysis of code at 17/03/15 resulted in opcount = sum(length[i])*4 + 9*n + 4*iter*(sum(length[i])*4+15n) */
 
-	flops = 3*(sc.iter+1)*(nnz/sc.timeMatvec);
+	flops = 2*(sc.iter+1)*(nnz/sc.timeMatvec);
 	flops /= 1000000000; // gflops (was mflops)
 
 	/* Print solution vector x or the first 10 values of the result. 
