@@ -198,7 +198,7 @@ int main(int argc, char *argv[]){
 	avgNNZ /= n;
 
 
-	flops = 3*(sc.iter+1)*totalLength/sc.timeMatvec;
+	flops = 2*(sc.iter+1)*totalLength/sc.timeMatvec;
 	flops /= 1000000000; // gflops
 
 	/* Print solution vector x or the first 10 values of the result. 
