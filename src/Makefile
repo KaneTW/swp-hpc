@@ -17,7 +17,7 @@ openmp: cg.exe
 
 # To load the PGI compiler use: $ module switch intel pgi
 openacc: CC = pgcc
-openacc: C_FLAGS += -acc -Minfo=all -Minline -ta=nvidia,cc20,cuda6.5,keepptx,keepgpu,fma,pin,maxregcount:28 -Mlarge_arrays  -O4 -Msafeptr=all
+openacc: C_FLAGS += -acc -Minfo=all -Minline -ta=nvidia,cc20,cuda6.5,fma,pin,maxregcount:28 -Mlarge_arrays  -O4 -Msafeptr=all
 openacc: cg.exe
 
 
