@@ -4,7 +4,7 @@ OBJ = main.o mmio.o io.o solver.o def.o help.o output.o errorcheck.o
 SRC = $(OBJ:%.o=%.c)
 HDR = $(OBJ:%.o=%.h) 
 
-C_FLAGS = -qopenmp-simd  -qopt-report 5 -qopt-report-phase=vec -opt-prefetch -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -xHost -fp-model fast=2 -restrict -Wall -opt-subscript-in-range -g
+C_FLAGS = -qopenmp-simd -opt-prefetch -use-intel-optimized-headers -no-prec-div -O3 -prof-dir=pgo -xHost -fp-model fast=2 -restrict -Wall -opt-subscript-in-range
 
 LINKER = ${CC}
 
