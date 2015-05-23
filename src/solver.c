@@ -125,7 +125,8 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 	floatType *r, *p, *q, *z, *diag;
 	floatType alpha, beta, rho, rho_old, dot_pq, bnrm2, check;
 	int iter;
-
+	floatType timeMatvec=0;
+	floatType timeMatvec_s=0;
 	/* allocate memory */
 	const size_t fvecSize = n * sizeof(floatType);
 	const size_t ivecSize = n * sizeof(int);
@@ -168,7 +169,10 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 		DBGMSG("=============== Iteration %d ======================\n", iter);
 	
 		/* q(k)   = A * p(k) */
+		timeMatvec_s = getWTime();
 		matvec(n, nnz, maxNNZ, data, indices, length, p, q);
+		timeMatvec_s = getWTime() - timeMatvec_s;
+		timeMatvec += timeMatvec_s;
 
 		/* dot_pq  = <p(k),q(k)> */
 		vectorDot(p, q, n, &dot_pq);
@@ -221,7 +225,7 @@ void cg(const int n, const int nnz, const int maxNNZ, const floatType* restrict 
 	 * product which is the most expensive 
 	 * function in the whole CG algorithm. */
 	sc->iter = iter;
-	sc->timeMatvec = 0;
+	sc->timeMatvec = timeMatvec;
 
 	/* Clean up */
 	// todo do we really need to?2
